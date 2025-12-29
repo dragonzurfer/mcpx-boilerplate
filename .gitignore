@@ -1,0 +1,25 @@
+.env
+*.db
+node_modules
+coverage.out
+*.log
+app
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+*.gocache
+.gomodcache/
+
+# React Native / Expo (mobile/)
+mobile/.expo/
+mobile/.expo-shared/
+mobile/android/
+mobile/ios/
+mobile/dist/
+mobile/build/
+mobile/.env
+
+*.keystore
+
+.venv

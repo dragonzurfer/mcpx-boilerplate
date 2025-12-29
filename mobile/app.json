@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Mcpx App",
+    "slug": "mcpx-app",
+    "version": "1.0.0",
+    "scheme": "mcpxapp",
+    "orientation": "portrait",
+    "splash": {
+      "backgroundColor": "#10161f"
+    },
+    "androidStatusBar": {
+      "translucent": false,
+      "backgroundColor": "#10161f",
+      "barStyle": "light-content"
+    },
+    "plugins": ["./plugins/withAppAndroid"],
+    "platforms": ["android"],
+    "android": {
+      "package": "in.mcpx.app",
+      "versionCode": 1
+    }
+  }
+}

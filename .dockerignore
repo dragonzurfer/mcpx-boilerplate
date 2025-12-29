@@ -1,0 +1,10 @@
+.git
+.DS_Store
+logs
+tripit-app
+*.log
+*.db
+node_modules
+coverage.out
+.env
+

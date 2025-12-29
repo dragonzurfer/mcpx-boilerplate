@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mcpx Boilerplate - Billing Starter</title>
+    <meta
+      name="description"
+      content="A starter paywall UI for your Gin + GKE boilerplate."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Sora:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    <header class="nav">
+      <div class="brand">Mcpx Boilerplate</div>
+      <div class="nav-links">
+        <a href="#plans">Plans</a>
+        <a href="#usage">Usage</a>
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" data-reveal>
+        <div>
+          <p class="eyebrow">Paywall blueprint</p>
+          <h1>Ship subscriptions, quotas, and usage metering fast.</h1>
+          <p class="lead">
+            This starter page is wired to `/api/billing/*`. Plug in auth and
+            customize the plans in `config/plans.json`.
+          </p>
+          <div class="hero-actions">
+            <a class="btn primary" href="#plans">Review plans</a>
+            <a class="btn ghost" href="#usage">Check usage</a>
+          </div>
+        </div>
+        <div class="hero-card">
+          <h3>What is included</h3>
+          <ul>
+            <li>Razorpay checkout (order + subscription)</li>
+            <li>Google Play verification + RTDN webhook</li>
+            <li>API usage metering per plan</li>
+            <li>Admin IP rules + rate limits</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="plans" id="plans" data-reveal>
+        <div class="section-title">
+          <h2>Plans</h2>
+          <p>Loaded from `config/plans.json` (or `PLANS_JSON`).</p>
+        </div>
+        <div id="plan-grid" class="plan-grid"></div>
+      </section>
+
+      <section class="checkout" data-reveal>
+        <div>
+          <h2>Checkout test</h2>
+          <p>
+            Paste a JWT from your app and pick a plan to open Razorpay checkout.
+          </p>
+        </div>
+        <div class="checkout-panel">
+          <label for="token">JWT (Authorization: Bearer)</label>
+          <textarea id="token" rows="3" placeholder="Paste token"></textarea>
+          <button id="checkout-btn" class="btn primary">Start checkout</button>
+          <p id="checkout-status" class="status"></p>
+        </div>
+      </section>
+
+      <section class="usage" id="usage" data-reveal>
+        <div>
+          <h2>Usage snapshot</h2>
+          <p>Fetch `/api/billing/me` with your token.</p>
+        </div>
+        <div class="usage-panel">
+          <button id="load-usage" class="btn ghost">Load usage</button>
+          <pre id="usage-output">Waiting for token...</pre>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>mcpx.in boilerplate</p>
+    </footer>
+
+    <script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

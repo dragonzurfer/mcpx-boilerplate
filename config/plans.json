@@ -1,0 +1,42 @@
+{
+  "currency": "INR",
+  "entryPlanCode": "entry",
+  "plans": [
+    {
+      "code": "free",
+      "name": "Free",
+      "type": "free",
+      "interval": "monthly",
+      "priceInr": 0,
+      "quotas": {
+        "api_calls": 1000
+      },
+      "entitlementDays": 30
+    },
+    {
+      "code": "entry",
+      "name": "Entry",
+      "type": "one_time",
+      "interval": "yearly",
+      "priceInr": 1999,
+      "quotas": {
+        "api_calls": 5000
+      },
+      "entitlementDays": 365
+    },
+    {
+      "code": "pro",
+      "name": "Pro",
+      "type": "subscription",
+      "interval": "monthly",
+      "priceInr": 499,
+      "mostPopular": true,
+      "razorpayPlanId": "",
+      "googlePlayProductIds": [""],
+      "quotas": {
+        "api_calls": 20000
+      },
+      "entitlementDays": 31
+    }
+  ]
+}
