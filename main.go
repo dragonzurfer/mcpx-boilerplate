@@ -10,17 +10,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"github.com/mcpx/boilerplate/billing"
-	"github.com/mcpx/boilerplate/core"
 	"github.com/mcpx/boilerplate/middleware"
+	"github.com/mcpx/boilerplate/payments"
 	"github.com/mcpx/boilerplate/routes"
+	"github.com/mcpx/boilerplate/services"
+	"github.com/mcpx/boilerplate/stores"
 )
 
 func main() {
 	loadEnv()
 	logger := initLogger()
 
-	plans, err := billing.LoadFromEnv()
+	plans, err := payments.LoadFromEnv()
 	if err != nil {
 		logger.Fatalf("error [plans]: %v", err)
 	}
@@ -29,12 +30,16 @@ func main() {
 	if dsn == "" {
 		logger.Fatalf("error [main]: DB_DSN missing")
 	}
-	store, err := core.NewStore(dsn)
+	store, err := stores.NewStore(dsn)
 	if err != nil {
 		logger.Fatalf("error [main]: db init failed: %v", err)
 	}
 
 	appKey := resolveAppKey()
+	billingService := &services.BillingService{
+		Store: store,
+		Plans: plans,
+	}
 	if isProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -61,6 +66,7 @@ func main() {
 		Store:      store,
 		Logger:     logger,
 		Plans:      plans,
+		Service:    billingService,
 		ProjectKey: appKey,
 	}
 	billingHandler.RegisterPublic(api)
@@ -71,7 +77,7 @@ func main() {
 	billingHandler.RegisterAuthed(authed)
 
 	metered := authed.Group("")
-	metered.Use(middleware.Metered(store, plans, appKey, middleware.MeterConfig{Metric: "api_calls", Cost: 1, RequireSubject: true}))
+	metered.Use(middleware.Metered(billingService, appKey, middleware.MeterConfig{Metric: "api_calls", Cost: 1, RequireSubject: true}))
 	routes.RegisterExample(metered)
 
 	admin := api.Group("/admin")

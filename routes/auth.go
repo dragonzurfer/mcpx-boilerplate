@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/mcpx/boilerplate/core"
+	"github.com/mcpx/boilerplate/stores"
 	"google.golang.org/api/idtoken"
 )
 
@@ -19,7 +19,7 @@ type GoogleLoginRequest struct {
 }
 
 // RegisterAuth registers the /api/auth/login route to exchange Google ID tokens for app tokens.
-func RegisterAuth(rg *gin.RouterGroup, store *core.Store, logf func(string, ...interface{})) {
+func RegisterAuth(rg *gin.RouterGroup, store *stores.Store, logf func(string, ...interface{})) {
 	audiences := parseGoogleAudiences()
 	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
 	issuer := strings.TrimSpace(os.Getenv("JWT_ISSUER"))

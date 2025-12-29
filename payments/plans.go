@@ -1,4 +1,4 @@
-package billing
+package payments
 
 import (
 	"encoding/json"

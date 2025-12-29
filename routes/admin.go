@@ -6,11 +6,11 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mcpx/boilerplate/core"
+	"github.com/mcpx/boilerplate/stores"
 )
 
 type AdminHandler struct {
-	Store      *core.Store
+	Store      *stores.Store
 	Logger     *log.Logger
 	ProjectKey string
 }

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mcpx/boilerplate/core"
 	"github.com/mcpx/boilerplate/middleware"
+	"github.com/mcpx/boilerplate/stores"
 	"google.golang.org/api/androidpublisher/v3"
 	"google.golang.org/api/option"
 )
@@ -49,7 +49,7 @@ func (h *BillingHandler) verifyGooglePlayPurchase(c *gin.Context) {
 		return
 	}
 
-	purchaseTokenHash := core.GooglePlayPurchaseTokenHash(purchaseToken)
+	purchaseTokenHash := stores.GooglePlayPurchaseTokenHash(purchaseToken)
 	if shouldLogPlayTokenHash() {
 		h.Logger.Printf("info [billing/googleplay/verify]: product=%s tokenHash=%s", productID, purchaseTokenHash)
 	}
@@ -102,14 +102,14 @@ func (h *BillingHandler) verifyGooglePlayPurchase(c *gin.Context) {
 	now := time.Now().UTC()
 	status, start, end := googlePlaySubscriptionWindow(purchase, now)
 
-	subRef, err := core.GooglePlaySubscriptionRef(purchaseTokenHash)
+	subRef, err := stores.GooglePlaySubscriptionRef(purchaseTokenHash)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid purchase token"})
 		return
 	}
 
 	raw, _ := json.Marshal(purchase)
-	_, _ = h.Store.UpsertGooglePlayPurchase(core.GooglePlayPurchaseModel{
+	_, _ = h.Store.UpsertGooglePlayPurchase(stores.GooglePlayPurchaseModel{
 		UserID:                      user.ID,
 		PlanCode:                    plan.Code,
 		PackageName:                 packageName,
@@ -206,7 +206,7 @@ func (h *BillingHandler) googlePlayWebhook(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 		return
 	}
-	tokenHash := core.GooglePlayPurchaseTokenHash(purchaseToken)
+	tokenHash := stores.GooglePlayPurchaseTokenHash(purchaseToken)
 	if shouldLogPlayTokenHash() {
 		h.Logger.Printf("info [billing/webhook/googleplay]: product=%s tokenHash=%s", productID, tokenHash)
 	}
@@ -244,7 +244,7 @@ func (h *BillingHandler) googlePlayWebhook(c *gin.Context) {
 	now := time.Now().UTC()
 	status, start, end := googlePlaySubscriptionWindow(purchase, now)
 
-	subRef, err := core.GooglePlaySubscriptionRef(tokenHash)
+	subRef, err := stores.GooglePlaySubscriptionRef(tokenHash)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 		return
@@ -264,7 +264,7 @@ func (h *BillingHandler) googlePlayWebhook(c *gin.Context) {
 	}
 
 	raw, _ := json.Marshal(purchase)
-	_, _ = h.Store.UpsertGooglePlayPurchase(core.GooglePlayPurchaseModel{
+	_, _ = h.Store.UpsertGooglePlayPurchase(stores.GooglePlayPurchaseModel{
 		UserID:                      userID,
 		PlanCode:                    plan.Code,
 		PackageName:                 packageName,

@@ -98,7 +98,9 @@ If allowlist is empty, all IPs are allowed unless explicitly denied.
 ## Routing conventions
 
 - `routes/auth.go`: login + token issuance
-- `routes/billing.go`: billing/plans/checkout/verify/usage
+- `routes/billing_handler.go`: billing/plans/checkout/verify/usage handlers
+- `routes/billing_razorpay.go`: Razorpay checkout + webhook wiring
+- `routes/billing_helpers.go`: shared billing helpers
 - `routes/billing_googleplay.go`: Play verification + RTDN
 - `routes/admin.go`: IP rules admin
 - `routes/example.go`: sample metered endpoint

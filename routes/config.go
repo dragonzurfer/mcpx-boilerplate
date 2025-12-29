@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mcpx/boilerplate/billing"
+	"github.com/mcpx/boilerplate/payments"
 )
 
 // ConfigResponse bundles client-side configuration.
@@ -20,7 +20,7 @@ type ConfigResponse struct {
 }
 
 // RegisterConfig routes a GET /config endpoint without requiring auth.
-func RegisterConfig(r *gin.Engine, plans *billing.Manager) {
+func RegisterConfig(r *gin.Engine, plans *payments.Manager) {
 	r.GET("/config", func(c *gin.Context) {
 		cfg := ConfigResponse{
 			AppName:        strings.TrimSpace(os.Getenv("APP_NAME")),

@@ -9,7 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/mcpx/boilerplate/core"
+	"github.com/mcpx/boilerplate/stores"
 	"gorm.io/gorm"
 )
 
@@ -26,7 +26,7 @@ type Claims struct {
 }
 
 // Auth verifies our signed JWT and attaches the user to context.
-func Auth(store *core.Store, logger *log.Logger) gin.HandlerFunc {
+func Auth(store *stores.Store, logger *log.Logger) gin.HandlerFunc {
 	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
 	if strings.TrimSpace(secret) == "" {
 		logger.Printf("error [auth]: JWT_SECRET missing")
@@ -101,11 +101,11 @@ func Auth(store *core.Store, logger *log.Logger) gin.HandlerFunc {
 }
 
 // CurrentUser fetches the authenticated user from context.
-func CurrentUser(c *gin.Context) (*core.UserModel, bool) {
+func CurrentUser(c *gin.Context) (*stores.UserModel, bool) {
 	val, ok := c.Get(ContextUserKey)
 	if !ok {
 		return nil, false
 	}
-	user, ok := val.(*core.UserModel)
+	user, ok := val.(*stores.UserModel)
 	return user, ok
 }

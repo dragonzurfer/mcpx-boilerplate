@@ -1,4 +1,4 @@
-package core
+package stores
 
 import (
 	"crypto/sha256"

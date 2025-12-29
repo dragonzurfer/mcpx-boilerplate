@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mcpx/boilerplate/core"
+	"github.com/mcpx/boilerplate/stores"
 )
 
 type ipRuleSet struct {
@@ -19,7 +19,7 @@ type ipRuleSet struct {
 }
 
 type IPFilter struct {
-	store         *core.Store
+	store         *stores.Store
 	projectKey    string
 	refreshEvery  time.Duration
 	envRules      ipRuleSet
@@ -28,7 +28,7 @@ type IPFilter struct {
 	nextRefreshAt time.Time
 }
 
-func NewIPFilter(store *core.Store, projectKey string) *IPFilter {
+func NewIPFilter(store *stores.Store, projectKey string) *IPFilter {
 	allowRaw := strings.TrimSpace(os.Getenv("IP_ALLOWLIST"))
 	denyRaw := strings.TrimSpace(os.Getenv("IP_DENYLIST"))
 	envRules := ipRuleSet{
