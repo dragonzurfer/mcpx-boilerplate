@@ -2,6 +2,10 @@
 
 A reusable Gin + Go starter with payments, usage metering, auth, and GKE deployment built-in.
 
+## Prerequisites
+
+See [docs/SETUP.md](docs/SETUP.md) for installation instructions for required tools (Go, gcloud, kubectl, Codex CLI, Gemini CLI, etc.).
+
 ## Quick start
 
 ```bash
