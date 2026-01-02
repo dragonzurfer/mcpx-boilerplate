@@ -12,7 +12,7 @@ This repo is a Gin + Go boilerplate for payments, usage metering, auth, and GKE 
 - `payments/`: plan configuration and pricing helpers.
 - `middleware/`: auth, rate limit, IP rules, metering.
 - `web/`: static demo UI for the API and billing flows.
-- `k8s/` + `scripts/`: Kubernetes manifests and deploy helpers.
+- `k8s/` + `scripts/`: Kubernetes manifests and deploy helpers (health probes hit `/healthz` every 10s).
 - `config/`: plan definitions and defaults.
 - `docs/`: architecture and operational docs.
 - `infra/`: Terraform for provisioning (cluster, registry, DNS).

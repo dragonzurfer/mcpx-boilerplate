@@ -13,3 +13,8 @@ Kubernetes manifests for the service, ingress, and TLS setup.
 - `managedcertificate.yaml`: GKE managed TLS certificate.
 - `frontendconfig.yaml`: HTTPS redirect configuration.
 - `kustomization.yaml`: kustomize entrypoint.
+
+## Health checks
+
+`deployment.yaml` configures startup, readiness, and liveness probes against `/healthz`
+on port 8080 with 10-second probe intervals.
