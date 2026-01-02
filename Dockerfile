@@ -15,6 +15,7 @@ WORKDIR /app
 
 COPY --from=build /out/app /app/app
 COPY --from=build /src/web /app/web
+COPY --from=build /src/config /app/config
 
 
 EXPOSE 8080
