@@ -1,0 +1,40 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="account">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-3xl">
+      <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Account</p>
+      <h1 class="mt-3 font-display text-3xl lg:text-5xl text-ink">Your membership</h1>
+      <p class="mt-4 text-slate-600 text-lg">Manage your plan, renewal status, and reading journey.</p>
+    </section>
+
+    <div id="account-error" class="hidden mt-8 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-700"></div>
+
+    <section class="mt-10 grid gap-6 lg:grid-cols-2">
+      <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Profile</p>
+        <div class="mt-4">
+          <p class="text-lg text-ink" id="account-name">—</p>
+          <p class="text-slate-600" id="account-email">—</p>
+        </div>
+      </div>
+      <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Subscription</p>
+        <div class="mt-4 space-y-2">
+          <p class="text-lg text-ink" id="account-plan">—</p>
+          <p class="text-slate-600" id="account-status">—</p>
+          <p class="text-sm text-slate-500" id="account-expiry-row">Ends: <span id="account-expiry" class="text-slate-700">—</span></p>
+        </div>
+        <ul class="mt-4 space-y-2 text-sm text-slate-600">
+          <li>Full access to all paid posts and deep dives.</li>
+          <li>Career growth tracks and leadership notes.</li>
+          <li>Skill development guides and playbooks.</li>
+          <li>Complete course library with new lessons.</li>
+        </ul>
+        <button id="account-renew" class="mt-6 w-full rounded-full bg-primary text-white py-3 font-semibold">Renew membership</button>
+      </div>
+    </section>
+  </main>
+</div>
+{{ end }}

@@ -1,10 +1,10 @@
-# docs.md
+# payments/docs.md
 
 ## Purpose
 
-Plan configuration and pricing helpers used by billing and metering.
+Static plan configuration for manual Razorpay renewals.
 
-## Files
+## Notes
 
-- `plans.go`: loads plan config, resolves quotas, and maps product IDs.
-- `plans_test.go`: unit tests for plan parsing and lookups.
+- Plans are loaded from `config/plans.json` or `PLANS_JSON`.
+- Manual renewal only: each plan purchase extends entitlements by `entitlementDays`.

@@ -1,9 +1,13 @@
-# docs.md
+# docs/docs.md
 
 ## Purpose
 
-Architecture and system design documentation.
+Architecture and setup documentation for Explore.
 
 ## Files
 
-- `ARCHITECTURE.md`: system overview, request flow, billing, metering, and deployment.
+- `ARCHITECTURE.md`: system overview, request flow, data model, and operations.
+- `SETUP.md`: environment setup and local run instructions.
+- `SCORING.md`: how funnel scoring works and how admin settings affect score/stage.
+- `PROMOS.md`: promo system overview, admin fields, and example flows.
+- `POST_ANALYTICS.md`: daily post analytics rollups, retention, and admin endpoints.

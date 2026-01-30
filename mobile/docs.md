@@ -1,21 +1,7 @@
-# docs.md
+# mobile/docs.md
 
-## Purpose
+## Status
 
-Expo/React Native client for testing Google Play billing flows against the backend.
+Legacy reference. The current Explore platform does **not** ship or maintain a mobile client or Google Play billing integration.
 
-## Files
-
-- `App.tsx`: main app UI and billing flow wiring.
-- `app.json`: Expo app configuration.
-- `package.json`: dependencies and scripts.
-- `package-lock.json`: lockfile for npm.
-- `tsconfig.json`: TypeScript configuration.
-- `README.md`: mobile setup notes.
-
-## Subfolders
-
-- `src/`: client API, config, and storage helpers.
-- `plugins/`: custom Expo config plugins.
-- `patches/`: dependency patches applied by `patch-package`.
-- `scripts/`: helper scripts for local development.
+If mobile support is needed again, this folder should be rebuilt against the new `/api/*` endpoints.

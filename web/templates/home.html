@@ -1,0 +1,23 @@
+{{ define "content" }}
+<div class="min-h-screen">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24" data-page="home">
+    <section class="max-w-3xl">
+      <p class="text-skyline uppercase tracking-[0.3em] text-xs">Newsletters</p>
+      <h1 class="mt-4 font-display text-4xl lg:text-6xl text-ink">Curated insights for builders, leaders, and makers.</h1>
+      <p class="mt-4 text-slate-600 text-lg">Explore deep dives, systems thinking, and growth playbooks crafted to build lasting skill.</p>
+    </section>
+
+    <section class="mt-10 flex flex-wrap gap-2" id="topic-chips"></section>
+
+    <section class="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3" id="posts-grid"></section>
+
+    <section class="mt-16 rounded-3xl border border-slate-200 bg-white/80 p-8 text-center" id="cta-login-section">
+      <h2 class="font-display text-2xl text-ink">Save your favorite posts and track progress</h2>
+      <p class="mt-3 text-slate-600">Sign in to unlock trial reads and personalized recommendations.</p>
+      <button class="mt-6 px-6 py-3 rounded-full bg-primary text-white font-semibold" id="cta-login">Continue with Google</button>
+    </section>
+  </main>
+</div>
+{{ end }}

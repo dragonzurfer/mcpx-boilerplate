@@ -1,138 +1,79 @@
-# Boilerplate Architecture
+# Explore Architecture
 
 ## Overview
 
-This boilerplate is a Gin + Go backend with:
+Explore is a self-hosted newsletter + courses platform with:
 
-- JWT + API key auth
-- Global and per-route rate limiting
-- IP allow/deny filtering with optional admin-managed rules
-- Razorpay (web) + Google Play (Android) payment flows
-- Usage metering + quota enforcement per plan
-- GKE deployment scripts for multi-subdomain hosting
+- Markdown content with Vimeo embeds (sanitized HTML)
+- Public / Trial / Paid access levels
+- Engagement-based funnel scoring
+- Promo decision engine (trial-only)
+- Daily post analytics rollup (unique impressions + engagement aggregates)
+- Manual Razorpay renewals (no auto-renew)
+- SEO-first rendering (OG, JSON-LD, sitemap, RSS)
 
-## Request flow + middleware layering
+## Request flow
 
 ```
-HTTP -> Logger/Recovery -> IPFilter
-     -> /api group: OptionalAPIKey -> RateLimiter
-       -> /api/auth/* (public)
-       -> /api/billing/* (public + webhooks)
-       -> /api/* (authed): Auth -> RateLimiter
-         -> /api/* (metered): Metered -> handlers
-       -> /api/admin/* (admin): RequireAdminToken -> admin handlers
+HTTP -> Logger/Recovery
+     -> / (pages): SSR templates + static assets
+     -> /api: OptionalAuth -> RateLimiter
+        -> /api/auth/login
+        -> /api/posts, /api/courses (public + optional auth)
+        -> /api/events/batch, /api/promos/decide
+        -> /api/plans (public)
+        -> /api/payments/webhook (public, signed)
+        -> /api/* (authed): Auth -> RateLimiter
+            -> /api/me
+            -> /api/payments/create-order, /confirm
+        -> /api/admin/*: Auth -> RequireAdminRole
 ```
 
-Key points:
+## Core services
 
-- `middleware.IPFilter` blocks requests based on `IP_ALLOWLIST`/`IP_DENYLIST` and optional DB rules.
-- `middleware.RateLimiter` is applied globally at `/api`, with stricter limits on authed routes.
-- `middleware.Auth` validates JWTs (HMAC) and loads users from the DB.
-- `middleware.OptionalAPIKey` sets API key context for usage metering on service endpoints.
-- `middleware.Metered` enforces plan quotas and writes usage counters per request.
+- **ContentService**: fetch posts/courses, render markdown → HTML, enforce access gating.
+- **EventService**: batch ingest events with anon/user IDs + daily unique post impressions.
+- **FunnelService**: compute score + stage, periodic recalculation job.
+- **PromoService**: decision engine (trial-only, caps/cooldowns).
+- **PaymentService**: Razorpay order + webhook verification, entitlement updates.
+- **SEO**: meta builder, OG image generation, sitemap/robots/RSS.
+- **Admin analytics UI**: dashboard pulls funnel + promo metrics from `/api/admin/analytics/*` and per-post analytics from `/api/admin/analytics/posts/*`.
 
-## Auth strategy
+## Data model (high level)
 
-- JWT: issued via `/api/auth/login` (Google ID token), verified with `JWT_SECRET` and `JWT_ISSUER`.
-- API key: `X-API-Key` header. Configure via `API_KEYS` (comma-separated).
-- Admin: `X-Admin-Token` header. Configure via `ADMIN_TOKEN`.
+- `users`, `oauth_identities`
+- `posts`, `tags`, `post_tags`
+- `courses`, `course_modules`, `course_lessons`
+- `events`, `post_impressions`, `post_daily_metrics`, `post_promo_daily_metrics`, `user_metrics`
+- `funnel_config`, `funnel_event_weights`, `funnel_stage_thresholds`
+- `promos`, `promo_variants`, `promo_decisions`, `promo_impressions`, `promo_clicks`
+- `payments`, `entitlements`
+- `site_settings`, `admin_audit_logs`
 
-## Payments + Paywall
+## Payment flow (manual renewal)
 
-### Plans
+1. Frontend requests `/api/payments/create-order` for plan.
+2. Razorpay order is created; payment record saved.
+3. Frontend completes checkout; `/api/payments/confirm` verifies signature.
+4. Webhook also marks payments as paid (idempotent).
+5. Entitlements are created or extended from current end date.
 
-Plans live in `config/plans.json` (or `PLANS_JSON`). Each plan defines:
+## Funnel + promo rules
 
-- `code`, `name`, `type` (`free`, `one_time`, `subscription`)
-- `interval` (`monthly`/`yearly`)
-- `priceInr`
-- `quotas` per metric (e.g. `api_calls`)
-- `razorpayPlanId` for subscription plans
-- `googlePlayProductIds` for Android subscriptions
+- Promos **only** on TRIAL posts.
+- PUBLIC posts never show promos.
+- PAID users never see promos.
+- Stage derivation:
+  - Active entitlement → `PAID_ACTIVE`
+  - Expired entitlement → `PAID_EXPIRED`
+  - Dormant threshold → `DORMANT`
+  - Otherwise score thresholds.
+- Default weights/stages are seeded automatically if none exist, and admins can override them in the UI.
+- Detailed behavior lives in `docs/SCORING.md` and `docs/PROMOS.md`.
+- Post analytics rollups and retention live in `docs/POST_ANALYTICS.md`.
 
-### Razorpay (web)
+## SEO
 
-- `POST /api/billing/checkout`: creates an order (one-time) or subscription (monthly).
-- `POST /api/billing/verify`: verifies Razorpay signature and activates entitlements.
-- `POST /api/billing/webhook/razorpay`: updates entitlements on payment/subscription events.
-
-### Google Play (Android)
-
-- `POST /api/billing/googleplay/verify`: verifies purchase token via Play API.
-- `POST /api/billing/webhook/googleplay`: RTDN webhook to keep status in sync.
-
-## Usage metering + paywall enforcement
-
-Usage is tracked in `usage_counters` with:
-
-- `project_key` (app slug)
-- `subject_type` (`user`, `api_key`, `ip`)
-- `subject_id` (user ID, API key hash, or IP)
-- `metric` (e.g. `api_calls`)
-- `period_start` (monthly)
-
-`middleware.Metered`:
-
-1. Resolves subject (user → API key → IP).
-2. Loads the active plan.
-3. Checks quota for the metric.
-4. Blocks with HTTP 402 if exceeded.
-5. Increments usage after successful responses.
-
-For client-side events (e.g. front-end metering), use:
-
-- `POST /api/billing/usage` with `{ metric, delta }`.
-
-## IP allow/deny rules
-
-Two sources are combined:
-
-- Env lists: `IP_ALLOWLIST`, `IP_DENYLIST` (CIDR or IP, comma-separated).
-- DB rules: stored in `ip_rules` via admin endpoints:
-  - `GET /api/admin/ip-rules`
-  - `POST /api/admin/ip-rules`
-  - `DELETE /api/admin/ip-rules/:id`
-
-If allowlist is empty, all IPs are allowed unless explicitly denied.
-
-## Routing conventions
-
-- `routes/auth.go`: login + token issuance
-- `routes/billing_handler.go`: billing/plans/checkout/verify/usage handlers
-- `routes/billing_razorpay.go`: Razorpay checkout + webhook wiring
-- `routes/billing_helpers.go`: shared billing helpers
-- `routes/billing_googleplay.go`: Play verification + RTDN
-- `routes/admin.go`: IP rules admin
-- `routes/example.go`: sample metered endpoint
-
-## Deployment + multi-project hosting
-
-Scripts:
-
-- `scripts/deploy_gke.sh`: full deploy to an existing cluster + DNS + static IP
-- `scripts/deploy_gke_code.sh`: fast deploy (image only)
-
-Key variables per app:
-
-- `SUBDOMAIN`: `script` → `script.mcpx.in`
-- `APP_NAME`: Kubernetes Deployment/Service name
-- `NAMESPACE`: per-app namespace (defaults to `APP_NAME`)
-
-Ingress flow:
-
-- Global static IP (`gcloud compute addresses`)
-- Cloud DNS A record (optional) → static IP
-- GKE Ingress + ManagedCertificate for TLS
-
-Nodepool targeting (standard clusters only):
-
-- `NODEPOOL_NAME` adds a `nodeSelector` to the Deployment
-- `CREATE_NODEPOOL=true` will create the nodepool if missing
-
-## Quick bootstrap checklist
-
-1. Copy the repo.
-2. Set `APP_NAME`, `APP_KEY`, `SUBDOMAIN`.
-3. Update `config/plans.json` (plan codes + quotas + product IDs).
-4. Update `.env` (DB, JWT, Razorpay, Play credentials).
-5. Deploy with `scripts/deploy_gke.sh`.
+- Server-side templates with OG tags, Twitter cards, canonical, JSON-LD.
+- `/robots.txt`, `/sitemap.xml` (PUBLIC posts only), `/rss.xml`.
+- OG images served via `/og/post/:slug` and `/og/course/:slug`.

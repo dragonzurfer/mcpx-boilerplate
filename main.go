@@ -35,11 +35,23 @@ func main() {
 		logger.Fatalf("error [main]: db init failed: %v", err)
 	}
 
-	appKey := resolveAppKey()
-	billingService := &services.BillingService{
-		Store: store,
-		Plans: plans,
+	siteName := getEnv("SITE_NAME", "explore")
+	siteURL := getEnv("SITE_URL", "https://explore.mcpx.in")
+	primaryColor := getEnv("PRIMARY_COLOR", "#38bdf8")
+	_, _ = store.EnsureSiteSettings(stores.SiteSettingsInput{
+		SiteName:     siteName,
+		SiteURL:      siteURL,
+		PrimaryColor: primaryColor,
+	})
+
+	contentService := &services.ContentService{Store: store}
+	funnelService := &services.FunnelService{Store: store, Logger: logger}
+
+	templates, err := routes.LoadTemplates()
+	if err != nil {
+		logger.Fatalf("error [templates]: %v", err)
 	}
+
 	if isProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -47,43 +59,13 @@ func main() {
 	r := gin.New()
 	r.Use(gin.LoggerWithWriter(logger.Writer()), gin.Recovery())
 
-	ipFilter := middleware.NewIPFilter(store, appKey)
-	r.Use(ipFilter.Handler())
+	seoHandler := &routes.SEOHandler{Store: store}
+	seoHandler.Register(r)
 
-	r.GET("/healthz", func(c *gin.Context) {
-		c.JSON(200, gin.H{"ok": true})
-	})
+	pageHandler := &routes.PageHandler{Store: store, Content: contentService, Templates: templates}
+	pageHandler.Register(r)
 
-	routes.RegisterConfig(r, plans)
-
-	api := r.Group("/api")
-	api.Use(middleware.OptionalAPIKey())
-	api.Use(middleware.RateLimiter(2000, time.Minute))
-
-	routes.RegisterAuth(api, store, logger.Printf)
-
-	billingHandler := &routes.BillingHandler{
-		Store:      store,
-		Logger:     logger,
-		Plans:      plans,
-		Service:    billingService,
-		ProjectKey: appKey,
-	}
-	billingHandler.RegisterPublic(api)
-
-	authed := api.Group("")
-	authed.Use(middleware.Auth(store, logger))
-	authed.Use(middleware.RateLimiter(300, time.Minute))
-	billingHandler.RegisterAuthed(authed)
-
-	metered := authed.Group("")
-	metered.Use(middleware.Metered(billingService, appKey, middleware.MeterConfig{Metric: "api_calls", Cost: 1, RequireSubject: true}))
-	routes.RegisterExample(metered)
-
-	admin := api.Group("/admin")
-	admin.Use(middleware.RequireAdminToken())
-	adminHandler := &routes.AdminHandler{Store: store, Logger: logger, ProjectKey: appKey}
-	adminHandler.Register(admin)
+	routes.RegisterConfig(r, store)
 
 	r.Static("/assets", "./web/assets")
 	r.GET("/privacy", func(c *gin.Context) { c.File("./web/privacy.html") })
@@ -91,14 +73,109 @@ func main() {
 	r.GET("/cancellation-refunds", func(c *gin.Context) { c.File("./web/cancellation-refunds.html") })
 	r.GET("/shipping", func(c *gin.Context) { c.File("./web/shipping.html") })
 	r.GET("/contact", func(c *gin.Context) { c.File("./web/contact.html") })
-	r.GET("/", func(c *gin.Context) { c.File("./web/index.html") })
-	r.NoRoute(func(c *gin.Context) { c.File("./web/index.html") })
+
+	api := r.Group("/api")
+	api.Use(middleware.RateLimiter(1000, time.Minute))
+	api.Use(middleware.OptionalAuth(store, logger))
+
+	routes.RegisterAuth(api, store, logger.Printf)
+
+	postsHandler := &routes.PostsHandler{Service: contentService}
+	postsHandler.Register(api)
+
+	coursesHandler := &routes.CoursesHandler{Service: contentService}
+	coursesHandler.Register(api)
+
+	eventsHandler := &routes.EventsHandler{Store: store}
+	eventsHandler.Register(api)
+
+	promosHandler := &routes.PromosHandler{Store: store}
+	promosHandler.Register(api)
+
+	paymentsHandler := &routes.PaymentsHandler{Store: store, Plans: plans, Logger: logger}
+	paymentsHandler.RegisterPublic(api)
+
+	authed := api.Group("")
+	authed.Use(middleware.Auth(store, logger))
+	authed.Use(middleware.RateLimiter(300, time.Minute))
+
+	meHandler := &routes.MeHandler{Store: store}
+	meHandler.Register(authed)
+	paymentsHandler.RegisterAuthed(authed)
+
+	admin := api.Group("/admin")
+	admin.Use(middleware.Auth(store, logger))
+	admin.Use(middleware.RequireAdminRole())
+
+	adminPosts := &routes.AdminPostsHandler{Store: store}
+	adminPosts.Register(admin)
+
+	adminFunnel := &routes.AdminFunnelHandler{Store: store}
+	adminFunnel.Register(admin)
+
+	adminPromos := &routes.AdminPromosHandler{Store: store}
+	adminPromos.Register(admin)
+
+	adminAnalytics := &routes.AdminAnalyticsHandler{Store: store}
+	adminAnalytics.Register(admin)
+
+	adminPostAnalytics := &routes.AdminPostAnalyticsHandler{Store: store}
+	adminPostAnalytics.Register(admin)
+
+	adminUsers := &routes.AdminUsersHandler{Store: store}
+	adminUsers.Register(admin)
+
+	adminSettings := &routes.AdminSettingsHandler{Store: store}
+	adminSettings.Register(admin)
+
+	startBackgroundJobs(store, funnelService, logger)
 
 	port := getEnv("APP_PORT", "8080")
 	logger.Printf("info [main]: starting server on :%s", port)
 	if err := r.Run(":" + port); err != nil {
 		logger.Fatalf("error [main.Run]: %v", err)
 	}
+}
+
+func startBackgroundJobs(store *stores.Store, funnelService *services.FunnelService, logger *log.Logger) {
+	go func() {
+		interval := 60 * time.Minute
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			now := time.Now().UTC()
+			if err := funnelService.RecalculateAll(now); err != nil {
+				logger.Printf("error [funnel]: %v", err)
+			}
+			<-ticker.C
+		}
+	}()
+
+	go func() {
+		interval := 24 * time.Hour
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			now := time.Now().UTC()
+			if err := store.ExpireEntitlements(now); err != nil {
+				logger.Printf("error [entitlements]: %v", err)
+			}
+			<-ticker.C
+		}
+	}()
+
+	go func() {
+		interval := 24 * time.Hour
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			now := time.Now().UTC()
+			if err := runPostAnalyticsRollup(store, now); err != nil {
+				logger.Printf("error [analytics]: %v", err)
+			}
+			<-ticker.C
+		}
+	}()
 }
 
 func loadEnv() {
@@ -119,16 +196,23 @@ func isProduction() bool {
 	return v == "prod" || v == "production"
 }
 
-func resolveAppKey() string {
-	if v := strings.TrimSpace(os.Getenv("APP_KEY")); v != "" {
-		return v
+func runPostAnalyticsRollup(store *stores.Store, now time.Time) error {
+	cfg, err := store.GetFunnelConfig()
+	if err != nil {
+		return err
 	}
-	name := strings.ToLower(strings.TrimSpace(os.Getenv("APP_NAME")))
-	name = strings.ReplaceAll(name, " ", "-")
-	if name != "" {
-		return name
+	retention := analyticsRetentionDays(cfg.ScoringWindowDays)
+	return store.RunPostAnalyticsRollup(now, retention)
+}
+
+func analyticsRetentionDays(scoringWindow int) int {
+	if scoringWindow <= 0 {
+		scoringWindow = 14
 	}
-	return "mcpx-app"
+	if scoringWindow < 14 {
+		scoringWindow = 14
+	}
+	return scoringWindow + 7
 }
 
 func initLogger() *log.Logger {

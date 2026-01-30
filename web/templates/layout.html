@@ -1,0 +1,76 @@
+{{ define "layout" }}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Meta.Title }}</title>
+    <meta name="description" content="{{ .Meta.Description }}" />
+    <link rel="canonical" href="{{ .Meta.CanonicalURL }}" />
+    <meta name="robots" content="{{ .Meta.Robots }}" />
+
+    <meta property="og:title" content="{{ .Meta.Title }}" />
+    <meta property="og:description" content="{{ .Meta.Description }}" />
+    <meta property="og:image" content="{{ .Meta.ImageURL }}" />
+    <meta property="og:url" content="{{ .Meta.CanonicalURL }}" />
+    <meta property="og:type" content="{{ .Meta.OgType }}" />
+    <meta property="og:site_name" content="{{ .Meta.SiteName }}" />
+    {{ if .Meta.PublishedTime }}<meta property="article:published_time" content="{{ .Meta.PublishedTime }}" />{{ end }}
+    {{ if .Meta.ModifiedTime }}<meta property="article:modified_time" content="{{ .Meta.ModifiedTime }}" />{{ end }}
+    {{ range .Meta.ArticleTags }}<meta property="article:tag" content="{{ . }}" />{{ end }}
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="{{ .Meta.Title }}" />
+    <meta name="twitter:description" content="{{ .Meta.Description }}" />
+    <meta name="twitter:image" content="{{ .Meta.ImageURL }}" />
+    {{ if .Meta.TwitterSite }}<meta name="twitter:site" content="{{ .Meta.TwitterSite }}" />{{ end }}
+    {{ if .Meta.TwitterCreator }}<meta name="twitter:creator" content="{{ .Meta.TwitterCreator }}" />{{ end }}
+
+    {{ if .Meta.GoogleVerification }}<meta name="google-site-verification" content="{{ .Meta.GoogleVerification }}" />{{ end }}
+    {{ if .Meta.BingVerification }}<meta name="msvalidate.01" content="{{ .Meta.BingVerification }}" />{{ end }}
+    {{ if .Meta.PinterestVerification }}<meta name="p:domain_verify" content="{{ .Meta.PinterestVerification }}" />{{ end }}
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,500&display=swap" rel="stylesheet" />
+
+    <style>
+      :root {
+        --primary: {{ .Theme.PrimaryColor }};
+        --offwhite: {{ .Theme.OffWhite }};
+      }
+    </style>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              display: ["Space Grotesk", "sans-serif"],
+              body: ["Source Serif 4", "serif"],
+            },
+            colors: {
+              ink: "#0f172a",
+              mist: "var(--offwhite)",
+              primary: "var(--primary)",
+              skyline: "var(--primary)",
+              ember: "#f97316",
+              night: "#0b0f1a",
+            }
+          }
+        }
+      };
+    </script>
+    <link rel="stylesheet" href="/assets/styles.css" />
+
+    {{ if .JSONLD }}
+    <script type="application/ld+json">{{ .JSONLD }}</script>
+    {{ end }}
+  </head>
+  <body class="bg-mist text-ink min-h-screen">
+    {{ block "content" . }}{{ end }}
+    <script src="https://cdn.jsdelivr.net/npm/@motionone/dom/dist/motion-one.min.js"></script>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>
+{{ end }}

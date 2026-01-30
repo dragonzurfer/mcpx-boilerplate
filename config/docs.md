@@ -1,4 +1,4 @@
-# docs.md
+# config/docs.md
 
 ## Purpose
 
@@ -6,4 +6,4 @@ Configuration files consumed by the backend.
 
 ## Files
 
-- `plans.json`: plan catalog, pricing, quotas, and provider product IDs.
+- `plans.json`: monthly/yearly manual plans with `entitlementDays` for renewal windows.

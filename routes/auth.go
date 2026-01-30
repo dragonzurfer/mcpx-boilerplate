@@ -16,6 +16,7 @@ import (
 
 type GoogleLoginRequest struct {
 	GoogleToken string `json:"googleToken" binding:"required"`
+	AnonID      string `json:"anon_id"`
 }
 
 // RegisterAuth registers the /api/auth/login route to exchange Google ID tokens for app tokens.
@@ -61,15 +62,31 @@ func RegisterAuth(rg *gin.RouterGroup, store *stores.Store, logf func(string, ..
 			email = v
 		}
 
-		user, err := store.GetOrCreateUser(payload.Subject, name, "google", email, payload.Claims)
+		avatar := ""
+		if v, ok := payload.Claims["picture"].(string); ok {
+			avatar = v
+		}
+
+		user, err := store.GetOrCreateUserWithIdentity(stores.UserIdentityInput{
+			Provider:       "google",
+			ProviderUserID: payload.Subject,
+			Email:          email,
+			Name:           name,
+			AvatarURL:      avatar,
+		})
 		if err != nil {
 			logf("error [auth/login]: persist user: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist user"})
 			return
 		}
 
+		if strings.TrimSpace(req.AnonID) != "" {
+			_ = store.MergeAnonEvents(req.AnonID, user.ID)
+			_ = store.MergeAnonPostImpressions(req.AnonID, user.ID)
+		}
+
 		claims := jwt.MapClaims{
-			"sub":      user.IdentityUID,
+			"sub":      payload.Subject,
 			"userId":   user.ID,
 			"email":    user.Email,
 			"exp":      time.Now().Add(365 * 24 * time.Hour).Unix(),
@@ -88,7 +105,7 @@ func RegisterAuth(rg *gin.RouterGroup, store *stores.Store, logf func(string, ..
 			"token": signed,
 			"user": gin.H{
 				"id":    user.ID,
-				"name":  user.DisplayName,
+				"name":  user.Name,
 				"email": user.Email,
 			},
 		})

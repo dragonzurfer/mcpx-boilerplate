@@ -83,7 +83,7 @@ func Auth(store *stores.Store, logger *log.Logger) gin.HandlerFunc {
 			return
 		}
 
-		user, err := store.GetUserByIdentity(claims.Subject)
+		user, err := store.GetUserByIdentity(stores.IdentityLookupInput{Provider: claims.Provider, ProviderUserID: claims.Subject})
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
@@ -108,4 +108,69 @@ func CurrentUser(c *gin.Context) (*stores.UserModel, bool) {
 	}
 	user, ok := val.(*stores.UserModel)
 	return user, ok
+}
+
+// OptionalAuth attempts JWT auth but doesn't block on failure.
+func OptionalAuth(store *stores.Store, logger *log.Logger) gin.HandlerFunc {
+	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	if strings.TrimSpace(secret) == "" {
+		logger.Printf("error [auth/optional]: JWT_SECRET missing")
+		return func(c *gin.Context) {
+			c.Next()
+		}
+	}
+	secretBytes := []byte(secret)
+	issuer := strings.TrimSpace(os.Getenv("JWT_ISSUER"))
+	if issuer == "" {
+		issuer = "mcpx"
+	}
+
+	return func(c *gin.Context) {
+		header := c.GetHeader("Authorization")
+		if header == "" {
+			c.Next()
+			return
+		}
+
+		parts := strings.SplitN(header, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			c.Next()
+			return
+		}
+		tokenString := strings.TrimSpace(parts[1])
+		if tokenString == "" {
+			c.Next()
+			return
+		}
+
+		claims := Claims{}
+		token, err := jwt.ParseWithClaims(tokenString, &claims, func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, errors.New("unexpected signing method")
+			}
+			return secretBytes, nil
+		})
+		if err != nil || !token.Valid {
+			c.Next()
+			return
+		}
+		if strings.TrimSpace(claims.Subject) == "" {
+			c.Next()
+			return
+		}
+		if claims.Issuer != "" && claims.Issuer != issuer {
+			c.Next()
+			return
+		}
+
+		user, err := store.GetUserByIdentity(stores.IdentityLookupInput{Provider: claims.Provider, ProviderUserID: claims.Subject})
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		c.Set(ContextUserKey, user)
+		c.Set(ContextTokenKey, tokenString)
+		c.Next()
+	}
 }

@@ -9,17 +9,15 @@ import (
 )
 
 type Plan struct {
-	Code                 string           `json:"code"`
-	Name                 string           `json:"name"`
-	Description          string           `json:"description,omitempty"`
-	Type                 string           `json:"type"`     // free, one_time, subscription
-	Interval             string           `json:"interval"` // monthly, yearly
-	PriceINR             int              `json:"priceInr"`
-	MostPopular          bool             `json:"mostPopular"`
-	Quotas               map[string]int64 `json:"quotas"`
-	EntitlementDays      int              `json:"entitlementDays,omitempty"`
-	RazorpayPlanID       string           `json:"razorpayPlanId,omitempty"`
-	GooglePlayProductIDs []string         `json:"googlePlayProductIds,omitempty"`
+	Code            string           `json:"code"`
+	Name            string           `json:"name"`
+	Description     string           `json:"description,omitempty"`
+	Type            string           `json:"type"`     // free, one_time, subscription
+	Interval        string           `json:"interval"` // monthly, yearly
+	PriceINR        int              `json:"priceInr"`
+	MostPopular     bool             `json:"mostPopular"`
+	Quotas          map[string]int64 `json:"quotas"`
+	EntitlementDays int              `json:"entitlementDays,omitempty"`
 }
 
 type Config struct {
@@ -125,21 +123,6 @@ func (m *Manager) RecommendedPlan() (Plan, bool) {
 	return Plan{}, false
 }
 
-func (m *Manager) PlanForGooglePlayProduct(productID string) (Plan, bool) {
-	productID = strings.TrimSpace(productID)
-	if productID == "" {
-		return Plan{}, false
-	}
-	for _, plan := range m.Config.Plans {
-		for _, pid := range plan.GooglePlayProductIDs {
-			if strings.TrimSpace(pid) == productID {
-				return plan, true
-			}
-		}
-	}
-	return Plan{}, false
-}
-
 func (m *Manager) QuotaForPlan(plan Plan, metric string) int64 {
 	metric = strings.TrimSpace(metric)
 	if metric == "" {
@@ -154,36 +137,27 @@ func (m *Manager) QuotaForPlan(plan Plan, metric string) int64 {
 func defaultConfig() Config {
 	return Config{
 		Currency:      "INR",
-		EntryPlanCode: "entry",
+		EntryPlanCode: "monthly",
 		Plans: []Plan{
 			{
-				Code:            "free",
-				Name:            "Free",
-				Type:            "free",
+				Code:            "monthly",
+				Name:            "Monthly",
+				Type:            "one_time",
 				Interval:        "monthly",
-				PriceINR:        0,
-				Quotas:          map[string]int64{"api_calls": 1000},
+				PriceINR:        999,
+				MostPopular:     false,
+				Quotas:          map[string]int64{},
 				EntitlementDays: 30,
 			},
 			{
-				Code:            "entry",
-				Name:            "Entry",
+				Code:            "yearly",
+				Name:            "Yearly",
 				Type:            "one_time",
 				Interval:        "yearly",
-				PriceINR:        1999,
-				MostPopular:     false,
-				Quotas:          map[string]int64{"api_calls": 5000},
-				EntitlementDays: 365,
-			},
-			{
-				Code:            "pro",
-				Name:            "Pro",
-				Type:            "subscription",
-				Interval:        "monthly",
-				PriceINR:        499,
+				PriceINR:        2999,
 				MostPopular:     true,
-				Quotas:          map[string]int64{"api_calls": 20000},
-				EntitlementDays: 31,
+				Quotas:          map[string]int64{},
+				EntitlementDays: 365,
 			},
 		},
 	}

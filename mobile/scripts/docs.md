@@ -1,9 +1,3 @@
-# docs.md
+# mobile (legacy)
 
-## Purpose
-
-Helper scripts for local mobile development.
-
-## Files
-
-- `run-android.sh`: runs the Android app with environment presets.
+This folder is retained for historical reference only. The Explore platform currently ships as a web app with manual Razorpay renewals and no mobile billing integration.

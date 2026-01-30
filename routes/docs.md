@@ -1,16 +1,25 @@
-# docs.md
+# routes/docs.md
 
 ## Purpose
 
-HTTP route handlers and registration for the Gin API.
+HTTP handlers for public, authenticated, and admin APIs plus server-rendered pages.
 
 ## Files
 
-- `admin.go`: admin-only endpoints (IP rule CRUD).
-- `auth.go`: login + token issuance (JWT) endpoints.
-- `billing_handler.go`: billing routes for plans, checkout, verify, usage, and "me".
-- `billing_razorpay.go`: Razorpay checkout and webhook integration.
-- `billing_googleplay.go`: Google Play verification and RTDN webhook handling.
-- `billing_helpers.go`: shared helpers for billing responses and env parsing.
-- `config.go`: public config endpoint for client bootstrap.
-- `example.go`: sample metered endpoint wiring.
+- `auth.go`: Google ID token exchange → JWT.
+- `config.go`: client config (site + auth + Razorpay key id).
+- `me.go`: `/api/me` profile + stage + entitlement.
+- `posts.go`: public post listing + detail (gated by access level).
+- `courses.go`: course listing + detail (gated by access level).
+- `events.go`: event batch ingest.
+- `promos.go`: promo decision + impression/click logging.
+- `payments.go`: Razorpay order creation, confirm, webhook.
+- `seo.go`: robots, sitemap, RSS, OG images (`/og/post/:slug`, `/og/course/:slug`).
+- `pages.go`: SSR templates for home/post/pricing/courses + account and admin pages (including post analytics page).
+- `admin_posts.go`: admin CRUD for posts (tag de-duplication to avoid duplicate post_tags).
+- `admin_funnel.go`: funnel config, weights, stages.
+- `admin_promos.go`: promos + variants with validation, duplicate-code handling, and promo detail fetch (includes variants).
+- `admin_analytics.go`: basic funnel/promo/content analytics.
+- `admin_post_analytics.go`: per-post analytics (summary, timeseries, funnel, promo breakdown).
+- `admin_users.go`: user list + detail (normalized JSON fields for admin UI).
+- `admin_settings.go`: site settings.

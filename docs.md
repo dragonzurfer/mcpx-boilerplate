@@ -2,24 +2,23 @@
 
 ## Purpose
 
-This repo is a Gin + Go boilerplate for payments, usage metering, auth, and GKE deployment. See `docs/ARCHITECTURE.md` for the end-to-end flow and middleware layering.
+Explore is a self-hosted newsletter + courses platform with manual Razorpay renewals, engagement-driven funnels (with default weights/stages that can be overridden in admin), an admin analytics dashboard, and SEO-first rendering.
 
 ## Key folders
 
-- `routes/`: HTTP handlers and route registration.
-- `services/`: business logic (billing, usage enforcement).
-- `stores/`: DB access and persistence models.
+- `routes/`: HTTP handlers and route registration (public, authed, admin).
+- `services/`: business logic (content rendering, funnel scoring, promo decisions, payments).
+- `stores/`: GORM models and persistence helpers.
 - `payments/`: plan configuration and pricing helpers.
-- `middleware/`: auth, rate limit, IP rules, metering.
-- `web/`: static demo UI for the API and billing flows.
-- `k8s/` + `scripts/`: Kubernetes manifests and deploy helpers (health probes hit `/healthz` every 10s).
-- `config/`: plan definitions and defaults.
-- `docs/`: architecture and operational docs.
-- `infra/`: Terraform for provisioning (cluster, registry, DNS).
-- `mobile/`: Expo app for Google Play billing flows.
+- `middleware/`: auth, admin guard, rate limiting.
+- `web/`: HTML templates and static assets (Tailwind CDN + vanilla JS).
+- `docs/`: architecture and setup documentation.
+- `k8s/`, `scripts/`, `infra/`: deployment helpers and infra tooling.
 
 ## Docs entrypoints
 
 - `docs/ARCHITECTURE.md`
-- `DEPLOY_GKE.md`
-- `DEPLOY_PLAY_STORE.md`
+- `docs/SETUP.md`
+- `docs/SCORING.md`
+- `docs/PROMOS.md`
+- `docs/POST_ANALYTICS.md`

@@ -1,9 +1,3 @@
-# docs.md
+# mobile (legacy)
 
-## Purpose
-
-Custom Expo config plugins for Android app configuration.
-
-## Files
-
-- `withAppAndroid.js`: Android configuration plugin.
+This folder is retained for historical reference only. The Explore platform currently ships as a web app with manual Razorpay renewals and no mobile billing integration.

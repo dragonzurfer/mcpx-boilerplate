@@ -1,15 +1,14 @@
-# docs.md
+# web/docs.md
 
 ## Purpose
 
-Static demo UI for billing and API flows served by the Go backend.
+Server-rendered HTML templates + static assets for Explore.
 
-## Files
+## Structure
 
-- `index.html`: main demo UI for the paywall flow.
-- `terms.html`: terms of service page.
-- `privacy.html`: privacy policy page.
-- `shipping.html`: shipping policy page.
-- `cancellation-refunds.html`: cancellation and refunds policy.
-- `contact.html`: contact page.
-- `assets/`: JavaScript and CSS assets for the demo.
+- `templates/`: SSR templates (layout + page content, including account + admin pages and shared navigation, plus post analytics).
+- `templates/layout.html` injects CSS variables for theme (primary color + off-white) from site settings.
+- Admin templates include inline helper copy for funnel and settings pages.
+- Admin promos template includes field-level guidance and multi-variant support (add/remove variants).
+- `assets/`: Tailwind CDN styles + vanilla JS app.
+- Static legal pages: `privacy.html`, `terms.html`, etc.

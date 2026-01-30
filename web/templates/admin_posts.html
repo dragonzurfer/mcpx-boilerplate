@@ -1,0 +1,87 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="admin-posts">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-4xl">
+      <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Posts</p>
+      <h1 class="mt-3 font-display text-3xl lg:text-5xl text-ink">Newsletter editor</h1>
+      <p class="mt-4 text-slate-600 text-lg">Create, update, and publish posts with access levels and tags.</p>
+    </section>
+
+    {{ template "admin_nav" . }}
+
+    <div id="admin-posts-error" class="hidden mt-8 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-700"></div>
+
+    <section class="mt-10 grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+      <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <div class="flex flex-wrap items-center gap-3">
+          <input id="posts-query" placeholder="Search posts" class="flex-1 rounded-full bg-white border border-slate-200 px-4 py-2 text-slate-700" />
+          <select id="posts-status" class="rounded-full bg-white border border-slate-200 px-4 py-2 text-slate-700">
+            <option value="">All statuses</option>
+            <option value="PUBLISHED">Published</option>
+            <option value="DRAFT">Draft</option>
+            <option value="SCHEDULED">Scheduled</option>
+            <option value="ARCHIVED">Archived</option>
+          </select>
+          <button id="posts-refresh" class="px-4 py-2 rounded-full border border-slate-200 text-slate-700">Refresh</button>
+        </div>
+        <div class="mt-6 overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th class="py-3">Title</th>
+                <th class="py-3">Access</th>
+                <th class="py-3">Status</th>
+                <th class="py-3">Analytics</th>
+                <th class="py-3"></th>
+              </tr>
+            </thead>
+            <tbody id="posts-table" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Editor</p>
+        <h2 class="mt-3 font-display text-2xl text-ink" id="post-editor-title">New post</h2>
+        <form id="post-editor" class="mt-6 space-y-4">
+          <input type="hidden" id="post-id" />
+          <input id="post-title" placeholder="Title" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="post-slug" placeholder="Slug" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <textarea id="post-excerpt" rows="2" placeholder="Excerpt" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+          <textarea id="post-body" rows="6" placeholder="Markdown body" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+          <div class="grid gap-3 md:grid-cols-2">
+            <select id="post-access" class="rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700">
+              <option value="PUBLIC">PUBLIC</option>
+              <option value="TRIAL">TRIAL</option>
+              <option value="PAID">PAID</option>
+            </select>
+            <select id="post-status" class="rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700">
+              <option value="DRAFT">DRAFT</option>
+              <option value="PUBLISHED">PUBLISHED</option>
+              <option value="SCHEDULED">SCHEDULED</option>
+              <option value="ARCHIVED">ARCHIVED</option>
+            </select>
+          </div>
+          <input id="post-published" placeholder="Published at (YYYY-MM-DD)" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="post-topic-tags" placeholder="Topic tags (comma separated)" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="post-interest-tags" placeholder="Interest tags (comma separated)" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="post-meta-title" placeholder="Meta title" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="post-meta-description" placeholder="Meta description" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="post-meta-image" placeholder="Meta image URL" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="post-canonical" placeholder="Canonical URL" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <label class="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" id="post-noindex" class="rounded border-slate-300" />
+            No index
+          </label>
+          <div class="flex flex-wrap gap-3">
+            <button type="submit" class="flex-1 rounded-full bg-primary text-white py-3 font-semibold">Save</button>
+            <button type="button" id="post-reset" class="flex-1 rounded-full border border-slate-200 text-slate-700 py-3">Reset</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+{{ end }}

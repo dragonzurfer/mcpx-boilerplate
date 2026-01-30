@@ -1,10 +1,28 @@
-# docs.md
+# stores/docs.md
 
 ## Purpose
 
-Database models and persistence helpers for users, subscriptions, usage, and billing providers.
+GORM models and persistence helpers for Explore.
 
-## Files
+## Key models
 
-- `store.go`: Gorm models and core CRUD helpers for users, subscriptions, usage counters, and IP rules.
-- `googleplay.go`: Google Play purchase storage helpers and token hashing utilities.
+- `users`, `oauth_identities`
+- `posts`, `tags`, `post_tags`
+- `courses`, `course_modules`, `course_lessons`
+- `events`
+- `post_impressions`, `post_daily_metrics`, `post_promo_daily_metrics`
+- `user_metrics`, `funnel_config`, `funnel_event_weights`, `funnel_stage_thresholds`
+- `promos`, `promo_variants`, `promo_decisions`, `promo_impressions`, `promo_clicks`
+- `payments`, `entitlements`
+- `site_settings`, `admin_audit_logs`
+
+## Store helpers
+
+- User lookup + upsert with OAuth identity
+- Post/course CRUD + HTML cache update
+- Event batch ingest, anon merge, and daily post impression de-dup
+- Funnel config + metrics upsert (weights/stages auto-seeded with defaults on first read)
+- Promo metrics + impression/click logging
+- Post analytics rollup (daily aggregation + retention cleanup)
+- Payment/entitlement upsert and expiry
+- `NewStoreWithDB` helper for tests.

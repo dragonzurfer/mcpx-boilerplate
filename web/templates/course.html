@@ -1,0 +1,16 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="course" data-course-slug="{{ .Course.Slug }}">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-3xl">
+      <h1 class="font-display text-3xl lg:text-5xl text-ink">{{ .Course.Title }}</h1>
+      <p class="mt-3 text-slate-600">{{ .Course.Excerpt }}</p>
+    </section>
+
+    <section class="mt-10 prose max-w-none" id="course-body">
+      {{ .ContentHTML }}
+    </section>
+  </main>
+</div>
+{{ end }}

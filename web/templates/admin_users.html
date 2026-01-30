@@ -1,0 +1,44 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="admin-users">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-4xl">
+      <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Users</p>
+      <h1 class="mt-3 font-display text-3xl lg:text-5xl text-ink">Member overview</h1>
+      <p class="mt-4 text-slate-600 text-lg">Search users and inspect entitlements or funnel stage.</p>
+    </section>
+
+    {{ template "admin_nav" . }}
+
+    <div id="admin-users-error" class="hidden mt-8 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-700"></div>
+
+    <section class="mt-10 grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+      <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <div class="flex flex-wrap items-center gap-3">
+          <input id="users-query" placeholder="Search by name or email" class="flex-1 rounded-full bg-white border border-slate-200 px-4 py-2 text-slate-700" />
+          <button id="users-refresh" class="px-4 py-2 rounded-full border border-slate-200 text-slate-700">Refresh</button>
+        </div>
+        <div class="mt-6 overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th class="py-3">Name</th>
+                <th class="py-3">Email</th>
+                <th class="py-3">Role</th>
+                <th class="py-3"></th>
+              </tr>
+            </thead>
+            <tbody id="users-table" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <p class="text-xs uppercase tracking-wide text-slate-500">User details</p>
+        <div id="user-detail" class="mt-4 text-slate-600">Select a user to view details.</div>
+      </div>
+    </section>
+  </main>
+</div>
+{{ end }}

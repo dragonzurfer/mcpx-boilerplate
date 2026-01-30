@@ -1,0 +1,50 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="admin-dashboard">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-4xl">
+      <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Admin</p>
+      <h1 class="mt-3 font-display text-3xl lg:text-5xl text-ink">Control center</h1>
+      <p class="mt-4 text-slate-600 text-lg">Manage newsletters, funnels, promos, and site settings.</p>
+    </section>
+
+    {{ template "admin_nav" . }}
+
+    <div id="admin-dashboard-error" class="hidden mt-8 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-700"></div>
+
+    <section class="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      <a href="/admin/posts" class="rounded-3xl border border-slate-200 bg-white/80 p-6 hover:border-primary/60">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Content</p>
+        <h3 class="mt-3 font-display text-xl text-ink">Posts</h3>
+        <p class="mt-2 text-sm text-slate-500">Draft, publish, and manage newsletter content.</p>
+      </a>
+      <a href="/admin/funnel" class="rounded-3xl border border-slate-200 bg-white/80 p-6 hover:border-primary/60">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Funnel</p>
+        <h3 class="mt-3 font-display text-xl text-ink">Scoring & stages</h3>
+        <p class="mt-2 text-sm text-slate-500">Tune event weights and thresholds.</p>
+      </a>
+      <a href="/admin/promos" class="rounded-3xl border border-slate-200 bg-white/80 p-6 hover:border-primary/60">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Promos</p>
+        <h3 class="mt-3 font-display text-xl text-ink">Campaigns</h3>
+        <p class="mt-2 text-sm text-slate-500">Build and test promo variants.</p>
+      </a>
+      <a href="/admin/analytics" class="rounded-3xl border border-slate-200 bg-white/80 p-6 hover:border-primary/60">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Analytics</p>
+        <h3 class="mt-3 font-display text-xl text-ink">Performance</h3>
+        <p class="mt-2 text-sm text-slate-500">Track funnel health and promo impact.</p>
+      </a>
+      <a href="/admin/users" class="rounded-3xl border border-slate-200 bg-white/80 p-6 hover:border-primary/60">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Users</p>
+        <h3 class="mt-3 font-display text-xl text-ink">Members</h3>
+        <p class="mt-2 text-sm text-slate-500">Search, inspect, and support readers.</p>
+      </a>
+      <a href="/admin/settings" class="rounded-3xl border border-slate-200 bg-white/80 p-6 hover:border-primary/60">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Settings</p>
+        <h3 class="mt-3 font-display text-xl text-ink">Site settings</h3>
+        <p class="mt-2 text-sm text-slate-500">Brand colors, SEO defaults, verification tags.</p>
+      </a>
+    </section>
+  </main>
+</div>
+{{ end }}

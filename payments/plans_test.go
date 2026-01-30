@@ -8,7 +8,7 @@ func TestLoadFromConfig_DefaultsAndLookup(t *testing.T) {
 			{
 				Code:      "FREE",
 				Name:      "Free",
-				Type:      "free",
+				Type:      "one_time",
 				Interval:  "monthly",
 				PriceINR:  0,
 				Quotas:    nil,
@@ -46,9 +46,8 @@ func TestLoadFromConfig_DefaultsAndLookup(t *testing.T) {
 func TestRecommendedPlan(t *testing.T) {
 	cfg := Config{
 		Plans: []Plan{
-			{Code: "free", Name: "Free", Type: "free", Interval: "monthly"},
-			{Code: "entry", Name: "Entry", Type: "one_time", Interval: "yearly"},
-			{Code: "pro", Name: "Pro", Type: "subscription", Interval: "monthly", MostPopular: true},
+			{Code: "monthly", Name: "Monthly", Type: "one_time", Interval: "monthly"},
+			{Code: "yearly", Name: "Yearly", Type: "one_time", Interval: "yearly", MostPopular: true},
 		},
 	}
 	mgr := LoadFromConfig(cfg)
@@ -57,17 +56,17 @@ func TestRecommendedPlan(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a recommended plan")
 	}
-	if plan.Code != "pro" {
-		t.Fatalf("expected pro as recommended, got %q", plan.Code)
+	if plan.Code != "yearly" {
+		t.Fatalf("expected yearly as recommended, got %q", plan.Code)
 	}
 }
 
 func TestEntryPlan(t *testing.T) {
 	cfg := Config{
-		EntryPlanCode: "entry",
+		EntryPlanCode: "monthly",
 		Plans: []Plan{
-			{Code: "free", Name: "Free", Type: "free", Interval: "monthly"},
-			{Code: "entry", Name: "Entry", Type: "one_time", Interval: "yearly"},
+			{Code: "monthly", Name: "Monthly", Type: "one_time", Interval: "monthly"},
+			{Code: "yearly", Name: "Yearly", Type: "one_time", Interval: "yearly"},
 		},
 	}
 	mgr := LoadFromConfig(cfg)
@@ -76,24 +75,7 @@ func TestEntryPlan(t *testing.T) {
 	if !ok {
 		t.Fatal("expected entry plan")
 	}
-	if plan.Code != "entry" {
-		t.Fatalf("expected entry plan, got %q", plan.Code)
-	}
-}
-
-func TestPlanForGooglePlayProduct(t *testing.T) {
-	cfg := Config{
-		Plans: []Plan{
-			{Code: "pro", Name: "Pro", Type: "subscription", Interval: "monthly", GooglePlayProductIDs: []string{"app_pro_monthly"}},
-		},
-	}
-	mgr := LoadFromConfig(cfg)
-
-	plan, ok := mgr.PlanForGooglePlayProduct("app_pro_monthly")
-	if !ok {
-		t.Fatal("expected plan for product")
-	}
-	if plan.Code != "pro" {
-		t.Fatalf("expected pro plan, got %q", plan.Code)
+	if plan.Code != "monthly" {
+		t.Fatalf("expected monthly plan, got %q", plan.Code)
 	}
 }
