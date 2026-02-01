@@ -13,6 +13,7 @@ GORM models and persistence helpers for Explore.
 - `post_impressions`, `post_daily_metrics`, `post_promo_daily_metrics`
 - `user_metrics`, `funnel_config`, `funnel_event_weights`, `funnel_stage_thresholds`
 - `promos`, `promo_variants`, `promo_decisions`, `promo_impressions`, `promo_clicks`
+- `tools`, `tool_usages`, `tool_events`, `tool_daily_metrics`
 - `payments`, `entitlements`
 - `site_settings`, `admin_audit_logs`
 
@@ -24,5 +25,7 @@ GORM models and persistence helpers for Explore.
 - Funnel config + metrics upsert (weights/stages auto-seeded with defaults on first read)
 - Promo metrics + impression/click logging
 - Post analytics rollup (daily aggregation + retention cleanup)
+- Tool catalog seeding, per-user usage state, and tool event logging
+- Tool daily rollups and tool-event retention cleanup
 - Payment/entitlement upsert and expiry
 - `NewStoreWithDB` helper for tests.

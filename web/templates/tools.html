@@ -1,0 +1,15 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="tools">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-3xl">
+      <p class="text-skyline uppercase tracking-[0.3em] text-xs">Tools</p>
+      <h1 class="mt-4 font-display text-4xl lg:text-6xl text-ink">Actionable tools for real career decisions.</h1>
+      <p class="mt-4 text-slate-600 text-lg">Use guided copilots to plan, improve, and ship your next move with clarity.</p>
+    </section>
+
+    <section class="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3" id="tools-grid"></section>
+  </main>
+</div>
+{{ end }}

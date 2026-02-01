@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Explore is a self-hosted newsletter + courses platform with manual Razorpay renewals, engagement-driven funnels (with default weights/stages that can be overridden in admin), an admin analytics dashboard, and SEO-first rendering.
+Explore is a self-hosted newsletter + courses platform with manual Razorpay renewals, engagement-driven funnels (with default weights/stages that can be overridden in admin), a tools hub (Career Copilot), an admin analytics dashboard, and SEO-first rendering.
 
 ## Key folders
 
@@ -22,3 +22,4 @@ Explore is a self-hosted newsletter + courses platform with manual Razorpay rene
 - `docs/SCORING.md`
 - `docs/PROMOS.md`
 - `docs/POST_ANALYTICS.md`
+- `docs/TOOLS.md`

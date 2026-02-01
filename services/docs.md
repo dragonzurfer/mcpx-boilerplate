@@ -19,6 +19,8 @@ Business logic for Explore: content rendering, funnel scoring, promo decisions, 
 - `promo_service_test.go`: decision tests.
 - `payment_service.go`: entitlement window rules.
 - `payment_service_test.go`: entitlement logic tests.
+- `tool_service.go`: tool usage gating (free limits, stage completion) + event logging.
+- `gemini_service.go`: Gemini client for resume analysis, mentor response, markdown chat replies, and audio transcription.
 
 ## Notes
 

@@ -1,0 +1,19 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="admin-tools">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-4xl">
+      <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Tools</p>
+      <h1 class="mt-3 font-display text-3xl lg:text-5xl text-ink">Tool controls</h1>
+      <p class="mt-4 text-slate-600 text-lg">Manage tool availability, free limits, and tracking flags. These settings control gating for Career Copilot.</p>
+    </section>
+
+    {{ template "admin_nav" . }}
+
+    <div id="admin-tools-error" class="hidden mt-8 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-700"></div>
+
+    <section class="mt-10 grid gap-8" id="admin-tools-list"></section>
+  </main>
+</div>
+{{ end }}

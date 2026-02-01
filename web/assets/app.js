@@ -5,13 +5,17 @@ const state = {
   plans: [],
   anonId: null,
   post: null,
-  entitlement: null
+  entitlement: null,
+  tool: null,
+  toolUsage: null,
+  toolConfig: null
 };
 
 const selectors = {
   page: () => document.querySelector("[data-page]"),
   postsGrid: () => document.getElementById("posts-grid"),
   coursesGrid: () => document.getElementById("courses-grid"),
+  toolsGrid: () => document.getElementById("tools-grid"),
   pricingCards: () => document.getElementById("pricing-cards"),
   postBody: () => document.getElementById("post-body"),
   courseBody: () => document.getElementById("course-body"),
@@ -25,6 +29,7 @@ const API = {
   authLogin: "/api/auth/login",
   posts: "/api/posts",
   courses: "/api/courses",
+  tools: "/api/tools",
   promos: "/api/promos",
   events: "/api/events/batch",
   plans: "/api/plans",
@@ -65,6 +70,12 @@ const init = async () => {
   if (page === "course") {
     await renderCourse();
   }
+  if (page === "tools") {
+    await renderTools();
+  }
+  if (page === "tool") {
+    await renderTool();
+  }
   if (page === "admin-analytics") {
     await renderAdminAnalytics();
   }
@@ -82,6 +93,9 @@ const init = async () => {
   }
   if (page === "admin-promos") {
     await renderAdminPromos();
+  }
+  if (page === "admin-tools") {
+    await renderAdminTools();
   }
   if (page === "admin-post-analytics") {
     await renderAdminPostAnalytics();
@@ -143,6 +157,17 @@ const listingAccessLevels = () => {
   return "PUBLIC";
 };
 
+const getToolSlug = () => {
+  const page = selectors.page();
+  const attrSlug = page?.dataset.toolSlug;
+  if (attrSlug) return attrSlug;
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  if (parts.length >= 2 && parts[0] === "tools") {
+    return parts[1];
+  }
+  return "";
+};
+
 const authHeader = () => {
   if (!state.token) return {};
   return { Authorization: `Bearer ${state.token}` };
@@ -174,6 +199,49 @@ const renderCourses = async () => {
 
   grid.innerHTML = items.map(renderCourseCard).join("");
   animateIn(grid.children);
+};
+
+const renderTools = async () => {
+  const grid = selectors.toolsGrid();
+  if (!grid) return;
+
+  const data = await fetchJSON(API.tools, { headers: authHeader() });
+  const items = data.items || [];
+  grid.innerHTML = items.map(renderToolCard).join("");
+  animateIn(grid.children);
+};
+
+const renderTool = async () => {
+  const slug = getToolSlug();
+  if (!slug) return;
+
+  const data = await fetchJSON(`${API.tools}/${slug}`, { headers: authHeader() });
+  state.tool = data.tool || null;
+  state.toolConfig = data.config || {};
+  state.toolUsage = data.usage_state || null;
+
+  const meta = toolCatalog[slug] || {};
+  const title = meta.title || data.tool?.name || "Tool";
+  const subtitle = meta.subtitle || "A guided tool built to help you move faster.";
+  const tags = meta.tags || [];
+
+  const titleEl = document.getElementById("tool-title");
+  const subtitleEl = document.getElementById("tool-subtitle");
+  const tagsEl = document.getElementById("tool-tags");
+  if (titleEl) titleEl.textContent = title;
+  if (subtitleEl) subtitleEl.textContent = subtitle;
+  if (tagsEl) {
+    tagsEl.innerHTML = tags.map((tag) => `<span class="px-3 py-1 rounded-full bg-white border border-slate-200 text-xs text-slate-600">${tag}</span>`).join("");
+  }
+
+  if (slug === "career-copilot") {
+    initCareerCopilotFlow({
+      slug,
+      config: data.config || {},
+      usageState: data.usage_state || null,
+      entitlementActive: Boolean(data.entitlement_active)
+    });
+  }
 };
 
 const renderPost = async () => {
@@ -1002,6 +1070,191 @@ const renderAdminPromos = async () => {
   await loadPromos();
 };
 
+const renderAdminTools = async () => {
+  const errorEl = document.getElementById("admin-tools-error");
+  const listEl = document.getElementById("admin-tools-list");
+
+  const fail = (message) => {
+    if (!errorEl) return;
+    errorEl.textContent = message;
+    errorEl.classList.remove("hidden");
+  };
+
+  if (!requireAdmin(errorEl)) {
+    return;
+  }
+
+  try {
+    const data = await fetchJSON("/api/admin/tools");
+    const items = data.items || [];
+    if (listEl) {
+      listEl.innerHTML = items.map(renderAdminToolCard).join("");
+      listEl.querySelectorAll("[data-tool-save]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const card = btn.closest("[data-tool-card]");
+          if (!card) return;
+          await saveAdminTool(card);
+        });
+      });
+    }
+  } catch (err) {
+    fail(err.message || "Failed to load tools.");
+  }
+};
+
+const renderAdminToolCard = (tool) => {
+  const freeRules = tool.config?.free_rules || {};
+  const tracking = tool.config?.tracking || {};
+  const stages = tool.config?.stages || [];
+  const summary = tool.metrics?.summary || {};
+  const windowDays = tool.metrics?.window_days || 7;
+  const encodedStages = encodeURIComponent(JSON.stringify(stages));
+
+  return `
+    <div class="rounded-3xl border border-slate-200 bg-white/80 p-6" data-tool-card data-tool-id="${tool.id}" data-tool-stages="${encodedStages}">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="font-display text-2xl text-ink">${tool.name}</h2>
+          <p class="text-sm text-slate-500">/${tool.slug} | ${tool.category || "tool"}</p>
+        </div>
+        <div class="flex items-center gap-3 text-sm text-slate-600">
+          <label class="flex items-center gap-2">
+            <input type="checkbox" data-field="is_active" ${tool.is_active ? "checked" : ""} class="rounded border-slate-300" />
+            Active
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" data-field="is_paid_tool" ${tool.is_paid_tool ? "checked" : ""} class="rounded border-slate-300" />
+            Paid-only
+          </label>
+        </div>
+      </div>
+
+      <div class="mt-6 grid gap-6 lg:grid-cols-2">
+        <div class="space-y-4">
+          <div class="space-y-2">
+            <label class="text-sm text-slate-600">Display name</label>
+            <input data-field="name" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" value="${tool.name || ""}" />
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm text-slate-600">Category</label>
+            <input data-field="category" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" value="${tool.category || ""}" />
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <p class="text-xs uppercase tracking-wide text-slate-500">Free limits</p>
+            <div class="mt-3 grid gap-3 md:grid-cols-2">
+              <div class="space-y-1">
+                <label class="text-xs text-slate-500">Free responses</label>
+                <input type="number" data-field="max_free_responses" class="w-full rounded-2xl border border-slate-200 px-4 py-2 text-slate-700" value="${freeRules.max_free_responses ?? 0}" />
+              </div>
+              <div class="space-y-1">
+                <label class="text-xs text-slate-500">Free audio inputs</label>
+                <input type="number" data-field="max_free_audio_inputs" class="w-full rounded-2xl border border-slate-200 px-4 py-2 text-slate-700" value="${freeRules.max_free_audio_inputs ?? 0}" />
+              </div>
+            </div>
+            <div class="mt-3 flex flex-wrap gap-4 text-sm text-slate-600">
+              <label class="flex items-center gap-2">
+                <input type="checkbox" data-field="single_use_free_flow" ${freeRules.single_use_free_flow ? "checked" : ""} class="rounded border-slate-300" />
+                Single-use free flow
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox" data-field="require_sign_in" ${freeRules.require_sign_in ? "checked" : ""} class="rounded border-slate-300" />
+                Require sign-in
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <p class="text-xs uppercase tracking-wide text-slate-500">Tracking</p>
+            <div class="mt-3 grid gap-3 text-sm text-slate-600">
+              <label class="flex items-center gap-2">
+                <input type="checkbox" data-field="track_uploads" ${tracking.track_uploads ? "checked" : ""} class="rounded border-slate-300" />
+                Track uploads
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox" data-field="track_responses" ${tracking.track_responses ? "checked" : ""} class="rounded border-slate-300" />
+                Track responses
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox" data-field="track_audio" ${tracking.track_audio ? "checked" : ""} class="rounded border-slate-300" />
+                Track audio usage
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox" data-field="track_stages" ${tracking.track_stages ? "checked" : ""} class="rounded border-slate-300" />
+                Track stage completions
+              </label>
+            </div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <p class="text-xs uppercase tracking-wide text-slate-500">Stages (read-only)</p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              ${stages.map((stage) => `<span class="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">${stage.label || stage.key}</span>`).join("")}
+            </div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <p class="text-xs uppercase tracking-wide text-slate-500">Last ${windowDays} days</p>
+            <p class="mt-2 text-sm text-slate-600">Sessions: <strong>${summary.sessions || 0}</strong> | Uploads: <strong>${summary.resume_uploads || 0}</strong></p>
+            <p class="text-sm text-slate-600">Responses: <strong>${summary.responses || 0}</strong> (audio ${summary.audio_responses || 0})</p>
+            <p class="text-sm text-slate-600">Flow completes: <strong>${summary.flow_completes || 0}</strong> | Stages: <strong>${summary.stage_completes || 0}</strong></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center justify-between gap-4">
+        <p class="text-xs text-slate-500">Changes apply instantly to the live tool.</p>
+        <button class="rounded-full bg-primary px-6 py-3 text-white font-semibold" data-tool-save>Save changes</button>
+      </div>
+      <p class="mt-3 text-sm text-slate-600 hidden" data-tool-status></p>
+    </div>
+  `;
+};
+
+const saveAdminTool = async (card) => {
+  const statusEl = card.querySelector("[data-tool-status]");
+  const toolID = card.dataset.toolId;
+  const stagesRaw = decodeURIComponent(card.dataset.toolStages || "");
+  const stages = stagesRaw ? JSON.parse(stagesRaw) : [];
+
+  const payload = {
+    name: card.querySelector('[data-field="name"]').value.trim(),
+    category: card.querySelector('[data-field="category"]').value.trim(),
+    is_active: card.querySelector('[data-field="is_active"]').checked,
+    is_paid_tool: card.querySelector('[data-field="is_paid_tool"]').checked,
+    config: {
+      free_rules: {
+        max_free_responses: Number(card.querySelector('[data-field="max_free_responses"]').value || 0),
+        max_free_audio_inputs: Number(card.querySelector('[data-field="max_free_audio_inputs"]').value || 0),
+        single_use_free_flow: card.querySelector('[data-field="single_use_free_flow"]').checked,
+        require_sign_in: card.querySelector('[data-field="require_sign_in"]').checked
+      },
+      tracking: {
+        track_uploads: card.querySelector('[data-field="track_uploads"]').checked,
+        track_responses: card.querySelector('[data-field="track_responses"]').checked,
+        track_audio: card.querySelector('[data-field="track_audio"]').checked,
+        track_stages: card.querySelector('[data-field="track_stages"]').checked
+      },
+      stages
+    }
+  };
+
+  try {
+    await fetchJSON(`/api/admin/tools/${toolID}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+    if (statusEl) {
+      statusEl.textContent = "Saved successfully.";
+      statusEl.classList.remove("hidden");
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = err.message || "Failed to save.";
+      statusEl.classList.remove("hidden");
+    }
+  }
+};
+
 const renderAdminUsers = async () => {
   const errorEl = document.getElementById("admin-users-error");
   clearError(errorEl);
@@ -1147,6 +1400,30 @@ const renderPricing = async () => {
   });
 };
 
+const toolCatalog = {
+  "career-copilot": {
+    title: "Career Copilot",
+    subtitle: "Resume intelligence, guided selections, and a 30-day plan with follow-up chat.",
+    description: "Upload once, get ATS + clarity feedback, then build a focused action plan.",
+    tags: ["Career", "Resume", "Growth"]
+  }
+};
+
+const renderToolCard = (tool) => {
+  const meta = toolCatalog[tool.slug] || {};
+  const title = meta.title || tool.name || "Tool";
+  const description = meta.description || "Guided workflows to move faster with confidence.";
+  const category = meta.category || tool.category || "tool";
+  return `
+    <a href="/tools/${tool.slug}" class="rounded-3xl border border-slate-200/60 bg-white/90 p-6 hover:border-skyline/60 transition">
+      <div class="text-xs uppercase tracking-wide text-slate-500">${category}</div>
+      <h3 class="mt-4 font-display text-xl text-ink">${title}</h3>
+      <p class="mt-2 text-slate-600 text-sm">${description}</p>
+      <div class="mt-4 text-skyline text-sm">Open tool -></div>
+    </a>
+  `;
+};
+
 const renderPostCard = (post) => {
   const access = String(post.access_level || "").toUpperCase();
   const badge = access === "PAID"
@@ -1183,6 +1460,1260 @@ const renderPlanCard = (plan) => {
       <button data-plan="${plan.code}" class="mt-6 w-full rounded-full bg-skyline text-white py-3 font-semibold">Subscribe</button>
     </div>
   `;
+};
+
+const careerCopilotFocuses = [
+  "Career Growth",
+  "Skill Development",
+  "Career Switching",
+  "Resume Improvement",
+  "Interview Preparation",
+  "General Career Advice"
+];
+
+const careerCopilotSubfocuses = {
+  "Career Growth": ["Promotion roadmap", "Leadership skills", "Salary negotiation", "Visibility strategy"],
+  "Skill Development": ["Tech stack depth", "Product instincts", "Data + analytics", "Design thinking"],
+  "Career Switching": ["Role transition", "Industry shift", "Remote relocation", "First-time manager"],
+  "Resume Improvement": ["ATS optimization", "Storytelling", "Portfolio alignment", "Project impact"],
+  "Interview Preparation": ["Behavioral interviews", "System design", "Case interviews", "Portfolio walkthrough"],
+  "General Career Advice": ["Clarity + direction", "Work-life balance", "Confidence boost", "Networking strategy"]
+};
+
+const careerCopilotQuestions = {
+  common: [
+    { key: "current_role", label: "What is your current role and level?", type: "text" },
+    { key: "target_outcome", label: "What outcome would feel like a win in 30 days?", type: "textarea" },
+    { key: "timeline", label: "Preferred timeline", type: "single", options: ["2 weeks", "1 month", "3 months", "Flexible"] },
+    { key: "time_commitment", label: "How many hours per week can you commit?", type: "slider", min: 1, max: 10, step: 1 }
+  ],
+  skillDevelopment: [
+    { key: "skill_agenda", label: "What skill agenda matters most right now?", type: "single", options: ["Deepen technical expertise", "Move into leadership", "Switch to product", "Become T-shaped generalist"] }
+  ],
+  careerSwitching: [
+    { key: "switch_reason", label: "Why do you want to switch?", type: "single", options: ["Role mismatch", "Growth ceiling", "Compensation", "Interest shift"] },
+    { key: "switch_constraints", label: "Constraints we should respect?", type: "multi", options: ["Location", "Salary floor", "Visa", "Time availability"] }
+  ]
+};
+
+const persistToolState = (session) => {
+  if (!session?.slug) return;
+  setStoredToolState(session.slug, {
+    resume_text: session.resumeText || "",
+    analysis: session.analysis || null,
+    focus: session.focus || "",
+    subfocus: session.subfocus || "",
+    answers: session.answers || {},
+    mentor: session.mentorResponse || null,
+    chat_history: session.chatHistory || [],
+    stage_summaries: session.stageSummaries || {}
+  });
+};
+
+const updateResumeState = (session, analysis) => {
+  if (!session) return;
+  session.analysis = analysis || null;
+  session.resumeText = analysis?.resume_text || analysis?.ResumeText || "";
+  persistToolState(session);
+};
+
+const handleToolAIError = (err, fallback) => {
+  const message = err?.message || "";
+  if (message === "PAID_REQUIRED") {
+    showToolPaywall("Upgrade required", "Upgrade to unlock this part of the tool.");
+    return false;
+  }
+  if (message === "INACTIVE") {
+    showToast("This tool is currently unavailable.");
+    return false;
+  }
+  showToast(fallback || "Something went wrong.");
+  return false;
+};
+
+const stripHTML = (value) => {
+  if (!value) return "";
+  const div = document.createElement("div");
+  div.innerHTML = value;
+  return div.textContent || div.innerText || "";
+};
+
+const escapeHTML = (value) => {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+};
+
+const formatInlineMarkdown = (value) => {
+  let text = value;
+  text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  text = text.replace(/__(.+?)__/g, "<strong>$1</strong>");
+  text = text.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  text = text.replace(/_(.+?)_/g, "<em>$1</em>");
+  text = text.replace(/`([^`]+)`/g, "<code class=\"rounded bg-slate-100 px-1\">$1</code>");
+  return text;
+};
+
+const renderMarkdownToHTML = (markdown) => {
+  const raw = escapeHTML(markdown);
+  const lines = raw.split("\n");
+  let html = "";
+  let inList = false;
+  let inCode = false;
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      if (!inCode) {
+        inCode = true;
+        html += "<pre class=\"mt-3 rounded-2xl bg-slate-900 text-slate-100 p-4 overflow-x-auto\"><code>";
+      } else {
+        inCode = false;
+        html += "</code></pre>";
+      }
+      return;
+    }
+
+    if (inCode) {
+      html += `${line}\n`;
+      return;
+    }
+
+    const bulletMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    if (bulletMatch) {
+      if (!inList) {
+        inList = true;
+        html += "<ul class=\"mt-2 list-disc list-inside text-slate-600\">";
+      }
+      html += `<li>${formatInlineMarkdown(bulletMatch[1])}</li>`;
+      return;
+    }
+
+    if (inList) {
+      html += "</ul>";
+      inList = false;
+    }
+
+    if (trimmed === "") {
+      html += "<br />";
+      return;
+    }
+
+    if (trimmed.startsWith("### ")) {
+      html += `<h4 class="mt-3 font-semibold text-ink">${formatInlineMarkdown(trimmed.replace(/^###\s+/, ""))}</h4>`;
+      return;
+    }
+    if (trimmed.startsWith("## ")) {
+      html += `<h3 class="mt-3 font-semibold text-ink">${formatInlineMarkdown(trimmed.replace(/^##\s+/, ""))}</h3>`;
+      return;
+    }
+    if (trimmed.startsWith("# ")) {
+      html += `<h2 class="mt-3 font-semibold text-ink">${formatInlineMarkdown(trimmed.replace(/^#\s+/, ""))}</h2>`;
+      return;
+    }
+
+    html += `<p class="text-slate-600">${formatInlineMarkdown(trimmed)}</p>`;
+  });
+
+  if (inList) {
+    html += "</ul>";
+  }
+  if (inCode) {
+    html += "</code></pre>";
+  }
+  return html;
+};
+
+const fetchMentorResponse = async (session) => {
+  if (!state.token) return null;
+  if (!session?.resumeText || !session?.analysis) {
+    showToast("Resume analysis is required before generating a plan.");
+    return null;
+  }
+  const payload = {
+    resume_text: session.resumeText,
+    analysis: session.analysis,
+    focus: session.focus,
+    subfocus: session.subfocus,
+    answers: session.answers
+  };
+  try {
+    const data = await fetchJSON(`${API.tools}/${session.slug}/mentor`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    return data?.mentor || null;
+  } catch (err) {
+    handleToolAIError(err, "Mentor response failed.");
+    return null;
+  }
+};
+
+const fetchChatResponse = async (session, message) => {
+  if (!state.token) return null;
+  if (!session?.resumeText || !session?.analysis) {
+    showToast("Resume analysis is required before chatting.");
+    return null;
+  }
+  const payload = {
+    resume_text: session.resumeText,
+    analysis: session.analysis,
+    focus: session.focus,
+    subfocus: session.subfocus,
+    answers: session.answers,
+    history: trimClientChatHistory(session.chatHistory || [], 8),
+    message
+  };
+  try {
+    const data = await fetchJSON(`${API.tools}/${session.slug}/chat`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    return data?.reply_markdown || data?.reply || "";
+  } catch (err) {
+    handleToolAIError(err, "Chat response failed.");
+    return null;
+  }
+};
+
+const transcribeToolAudio = async (session, blob) => {
+  if (!state.token) return null;
+  const formData = new FormData();
+  formData.append("file", blob, "audio.webm");
+  try {
+    const res = await fetch(`${API.tools}/${session.slug}/transcribe`, {
+      method: "POST",
+      headers: authHeader(),
+      body: formData
+    });
+    if (!res.ok) {
+      let message = `Request failed: ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data?.error) message = data.error;
+      } catch (err) {
+        // ignore parse errors
+      }
+      throw new Error(message);
+    }
+    const data = await res.json();
+    return data?.transcript || "";
+  } catch (err) {
+    handleToolAIError(err, "Voice transcription failed.");
+    return null;
+  }
+};
+
+const renderMentorResponse = (mentor) => {
+  if (!mentor) {
+    return `<p class="text-slate-600">We couldn’t generate a response. Please try again.</p>`;
+  }
+  const summary = mentor.summary || mentor.Summary || [];
+  const strengths = mentor.strengths || mentor.Strengths || [];
+  const gaps = mentor.gaps || mentor.Gaps || [];
+  const plan7 = mentor.plan_7d || mentor.Plan7D || [];
+  const plan30 = mentor.plan_30d || mentor.Plan30D || [];
+  const resources = mentor.resources || mentor.Resources || [];
+  const responseText = mentor.response_text || mentor.ResponseText || "";
+
+  const buildList = (items) => {
+    if (!items || items.length === 0) return `<p class="text-sm text-slate-500">No data yet.</p>`;
+    return `<ul class="mt-2 list-disc list-inside text-slate-600">${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+  };
+
+  return `
+    ${responseText ? `<p class="text-slate-700">${responseText}</p>` : ""}
+    <div class="mt-4">
+      <p class="font-semibold text-ink">Summary</p>
+      ${buildList(summary)}
+    </div>
+    <div class="mt-4">
+      <p class="font-semibold text-ink">Strengths</p>
+      ${buildList(strengths)}
+    </div>
+    <div class="mt-4">
+      <p class="font-semibold text-ink">Gaps to close</p>
+      ${buildList(gaps)}
+    </div>
+    <div class="mt-4">
+      <p class="font-semibold text-ink">7-day plan</p>
+      ${buildList(plan7)}
+    </div>
+    <div class="mt-4">
+      <p class="font-semibold text-ink">30-day plan</p>
+      ${buildList(plan30)}
+    </div>
+    <div class="mt-4">
+      <p class="font-semibold text-ink">Resources</p>
+      ${buildList(resources)}
+    </div>
+  `;
+};
+
+const trimClientChatHistory = (history, limit = 12) => {
+  if (!Array.isArray(history)) return [];
+  if (history.length <= limit) return history;
+  return history.slice(history.length - limit);
+};
+
+const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) => {
+  const stages = ["upload", "analysis", "focus", "subfocus", "questions", "mentor_response", "chat"];
+  const stageLabels = {
+    upload: "Resume upload",
+    analysis: "Resume analysis",
+    focus: "Focus selection",
+    subfocus: "Subfocus selection",
+    questions: "Context questions",
+    mentor_response: "Mentor response",
+    chat: "Follow-up chat"
+  };
+  const stageNodes = {};
+  stages.forEach((key) => {
+    stageNodes[key] = document.querySelector(`[data-stage="${key}"]`);
+  });
+
+  const stageContainer = document.getElementById("tool-stages");
+  const completedContainer = document.getElementById("tool-completed");
+  const recapContainer = document.getElementById("tool-recap");
+  const progressBar = document.getElementById("tool-progress-bar");
+  const progressLabel = document.getElementById("tool-progress-label");
+  const stageCards = document.querySelectorAll(".tool-stage-card");
+  if (!stageContainer) return;
+
+  const freeRules = config?.free_rules || {};
+  const resumeState = shouldResumeToolState();
+  if (!resumeState) {
+    clearStoredToolState(slug);
+  }
+  const storedState = resumeState ? getStoredToolState(slug) || {} : {};
+  const toolSession = {
+    slug,
+    entitlementActive: Boolean(entitlementActive),
+    usage: usageState || {
+      has_used_free_flow: false,
+      free_user_responses_used: 0,
+      free_audio_inputs_used: 0,
+      completed_stages: []
+    },
+    resumeText: storedState.resume_text || "",
+    analysis: storedState.analysis || null,
+    focus: storedState.focus || "",
+    subfocus: storedState.subfocus || "",
+    answers: storedState.answers || {},
+    mentorResponse: storedState.mentor || null,
+    chatHistory: storedState.chat_history || [],
+    stageSummaries: storedState.stage_summaries || {},
+    questions: [],
+    questionIndex: 0,
+    pendingAudio: false
+  };
+
+  if (!resumeState) {
+    toolSession.usage.completed_stages = [];
+    toolSession.stageSummaries = {};
+  }
+
+  window.addEventListener("pagehide", () => {
+    clearStoredToolState(slug);
+  });
+
+  const requireSignIn = Boolean(freeRules.require_sign_in);
+  if (requireSignIn && !state.user) {
+    stageContainer.classList.add("pointer-events-none", "opacity-70");
+    showOverlay({
+      title: "Sign in required",
+      message: "Sign in to use Career Copilot and save your progress.",
+      primary: { text: "Continue with Google", action: promptGoogleLogin }
+    });
+  }
+
+  if (state.user) {
+    sendToolAction(slug, { action: "session_start" }).then((result) => {
+      if (result?.usage_state) {
+        toolSession.usage = {
+          ...result.usage_state,
+          completed_stages: resumeState ? (result.usage_state.completed_stages || []) : []
+        };
+      }
+      updateChatLimits(toolSession, freeRules);
+    });
+  }
+
+  const updateProgress = (activeKey) => {
+    if (!progressBar) return;
+    const index = stages.indexOf(activeKey);
+    const denominator = Math.max(stages.length - 1, 1);
+    const pct = Math.round(Math.max(index, 0) / denominator * 100);
+    progressBar.style.width = `${pct}%`;
+    if (progressLabel) progressLabel.textContent = `${pct}%`;
+  };
+
+  const setActiveStage = (key) => {
+    stageCards.forEach((card) => {
+      card.classList.toggle("hidden", card.dataset.stage !== key);
+    });
+    updateProgress(key);
+    if (window.motion) {
+      const node = stageNodes[key];
+      if (node) {
+        window.motion.animate(node, { opacity: [0, 1], transform: ["translateY(12px)", "translateY(0px)"] }, { duration: 0.4 });
+      }
+    }
+  };
+
+  const renderCompletedStages = () => {
+    if (!completedContainer) return;
+    completedContainer.innerHTML = "";
+    const latestKey = [...stages].reverse().find((key) => Boolean(toolSession.stageSummaries?.[key]));
+    if (!latestKey) {
+      completedContainer.classList.add("hidden");
+      return;
+    }
+    completedContainer.classList.remove("hidden");
+    const summary = stripHTML(toolSession.stageSummaries[latestKey]);
+    const label = stageLabels[latestKey] || latestKey.replace(/_/g, " ");
+    const card = document.createElement("div");
+    card.className = "rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-slate-600 flex items-center gap-2 max-w-full";
+    const labelEl = document.createElement("span");
+    labelEl.className = "text-xs uppercase tracking-wide text-slate-400";
+    labelEl.textContent = label;
+    const summaryEl = document.createElement("span");
+    summaryEl.className = "text-sm truncate";
+    summaryEl.textContent = summary;
+    summaryEl.title = summary;
+    card.appendChild(labelEl);
+    card.appendChild(summaryEl);
+    completedContainer.appendChild(card);
+    animateIn(completedContainer.children);
+  };
+
+  const renderRecap = () => {
+    if (!recapContainer) return;
+    if (!toolSession.mentorResponse) {
+      recapContainer.classList.add("hidden");
+      recapContainer.innerHTML = "";
+      return;
+    }
+
+    if (completedContainer) {
+      completedContainer.classList.add("hidden");
+    }
+
+    const recapCards = [];
+    const uploadSummary = stripHTML(toolSession.stageSummaries?.upload || "");
+    if (uploadSummary) {
+      recapCards.push(`
+        <div class="tool-stage-card w-full max-w-2xl mx-auto rounded-3xl border border-slate-200 bg-white/90 p-6">
+          <h3 class="font-display text-xl text-ink">Resume uploaded</h3>
+          <p class="mt-2 text-slate-600">${escapeHTML(uploadSummary)}</p>
+        </div>
+      `);
+    }
+
+    const analysis = toolSession.analysis;
+    if (analysis) {
+      const atsScore = analysis.ats_score ?? analysis.ATSScore ?? 0;
+      const readability = analysis.readability_summary || analysis.ReadabilitySummary || "Analysis ready.";
+      const wins = analysis.quick_wins || analysis.QuickWins || [];
+      recapCards.push(`
+        <div class="tool-stage-card w-full max-w-2xl mx-auto rounded-3xl border border-slate-200 bg-white/90 p-6">
+          <h3 class="font-display text-xl text-ink">Resume analysis</h3>
+          <div class="mt-4 grid gap-4 md:grid-cols-3">
+            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wide text-slate-500">ATS score</p>
+              <p class="mt-2 font-display text-2xl text-ink">${escapeHTML(atsScore)}</p>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wide text-slate-500">Readability</p>
+              <p class="mt-2 text-slate-700">${escapeHTML(readability)}</p>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wide text-slate-500">Quick wins</p>
+              <ul class="mt-2 text-sm text-slate-600 list-disc list-inside">
+                ${wins.map((item) => `<li>${escapeHTML(item)}</li>`).join("") || "<li>Review your top accomplishments for impact.</li>"}
+              </ul>
+            </div>
+          </div>
+        </div>
+      `);
+    }
+
+    const selections = [];
+    if (toolSession.focus) selections.push(toolSession.focus);
+    if (toolSession.subfocus) selections.push(toolSession.subfocus);
+    if (selections.length) {
+      recapCards.push(`
+        <div class="tool-stage-card w-full max-w-2xl mx-auto rounded-3xl border border-slate-200 bg-white/90 p-6">
+          <h3 class="font-display text-xl text-ink">Your selections</h3>
+          <div class="mt-3 flex flex-wrap gap-2">
+            ${selections.map((item) => `<span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">${escapeHTML(item)}</span>`).join("")}
+          </div>
+        </div>
+      `);
+    }
+
+    recapContainer.innerHTML = recapCards.join("");
+    recapContainer.classList.toggle("hidden", recapCards.length === 0);
+    if (recapCards.length > 0) {
+      animateIn(recapContainer.children);
+    }
+  };
+
+  const revealStage = (key) => {
+    setActiveStage(key);
+  };
+
+  const collapseStage = (key, summaryHtml) => {
+    const node = stageNodes[key];
+    if (!node) return;
+    const body = node.querySelector(".stage-body");
+    const summary = node.querySelector(".stage-summary");
+    if (body) body.classList.add("hidden");
+    if (summary) {
+      summary.innerHTML = summaryHtml;
+      summary.classList.remove("hidden");
+    }
+  };
+
+  const completeStage = async (key, summaryHtml) => {
+    collapseStage(key, summaryHtml);
+    toolSession.stageSummaries[key] = summaryHtml;
+    persistToolState(toolSession);
+    renderCompletedStages();
+    renderRecap();
+    sendToolAction(slug, { action: "stage_complete", stage_key: key }).catch(() => {});
+  };
+
+  const restoreState = () => {
+    renderCompletedStages();
+    renderRecap();
+    if (toolSession.analysis) {
+      applyResumeAnalysis(toolSession.analysis);
+    }
+    if (toolSession.mentorResponse) {
+      const mentor = document.getElementById("mentor-response");
+      if (mentor) mentor.innerHTML = renderMentorResponse(toolSession.mentorResponse);
+    }
+
+    const completedKeys = new Set(toolSession.usage?.completed_stages || []);
+    let activeKey = stages.find((key) => !completedKeys.has(key)) || "chat";
+    if (toolSession.mentorResponse && completedKeys.has("mentor_response")) {
+      activeKey = toolSession.chatHistory?.length ? "chat" : "mentor_response";
+    }
+    revealStage(activeKey);
+  };
+
+  const analyzeBtn = document.getElementById("resume-analyze");
+  const resumeInput = document.getElementById("resume-file");
+  const resumeFileName = document.getElementById("resume-file-name");
+  const uploadLoader = document.getElementById("upload-loader");
+
+  if (resumeInput && resumeFileName) {
+    resumeInput.addEventListener("change", () => {
+      const file = resumeInput.files?.[0];
+      resumeFileName.textContent = file ? file.name : "No file selected.";
+    });
+  }
+
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener("click", async () => {
+      if (!state.user && requireSignIn) {
+        showOverlay({
+          title: "Sign in required",
+          message: "Continue with Google to upload your resume.",
+          primary: { text: "Continue with Google", action: promptGoogleLogin }
+        });
+        return;
+      }
+      const file = resumeInput?.files?.[0];
+      if (!file) {
+        showToast("Please choose a PDF resume.");
+        return;
+      }
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = "Analyzing…";
+      if (uploadLoader) uploadLoader.classList.remove("hidden");
+      const result = await uploadResumeForAnalysis(slug, file);
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = "Analyze resume";
+      if (uploadLoader) uploadLoader.classList.add("hidden");
+      if (!result) {
+        return;
+      }
+      if (!result.allowed) {
+        showToolPaywall("Resume upload unlocked with Pro", "You’ve already used your free run. Upgrade to upload again and continue.");
+        return;
+      }
+      toolSession.usage = result.usage_state || toolSession.usage;
+      updateResumeState(toolSession, result.analysis);
+      applyResumeAnalysis(result.analysis);
+      await completeStage("upload", `<strong>${file.name}</strong> uploaded and ready.`);
+      revealStage("analysis");
+    });
+  }
+
+  const analysisBtn = document.getElementById("analysis-continue");
+  if (analysisBtn) {
+    analysisBtn.addEventListener("click", async () => {
+      await completeStage("analysis", "ATS score and quick wins saved.");
+      revealStage("focus");
+    });
+  }
+
+  const focusOptions = document.getElementById("focus-options");
+  const focusContinue = document.getElementById("focus-continue");
+  if (focusOptions) {
+    focusOptions.innerHTML = careerCopilotFocuses.map((focus) => `
+      <button class="focus-card rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-skyline/70" data-value="${focus}">
+        <div class="font-semibold text-ink">${focus}</div>
+        <div class="text-sm text-slate-500">Tailor the plan to this goal.</div>
+      </button>
+    `).join("");
+    focusOptions.querySelectorAll(".focus-card").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        focusOptions.querySelectorAll(".focus-card").forEach((el) => el.classList.remove("border-skyline", "bg-skyline/5"));
+        btn.classList.add("border-skyline", "bg-skyline/5");
+        toolSession.focus = btn.dataset.value;
+        persistToolState(toolSession);
+        if (focusContinue) focusContinue.disabled = false;
+      });
+    });
+    if (toolSession.focus) {
+      focusOptions.querySelectorAll(".focus-card").forEach((el) => {
+        const isMatch = el.dataset.value === toolSession.focus;
+        el.classList.toggle("border-skyline", isMatch);
+        el.classList.toggle("bg-skyline/5", isMatch);
+      });
+      if (focusContinue) focusContinue.disabled = false;
+    }
+  }
+  if (focusContinue) {
+    focusContinue.addEventListener("click", async () => {
+      if (!toolSession.focus) return;
+      await completeStage("focus", `Focus: <strong>${toolSession.focus}</strong>.`);
+      revealStage("subfocus");
+      renderSubfocusOptions(toolSession);
+    });
+  }
+
+  const renderSubfocusOptions = (session) => {
+    const subfocusOptions = document.getElementById("subfocus-options");
+    const subfocusContinue = document.getElementById("subfocus-continue");
+    if (!subfocusOptions) return;
+    const items = careerCopilotSubfocuses[session.focus] || [];
+    subfocusOptions.innerHTML = items.map((subfocus) => `
+      <button class="subfocus-card rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-skyline/70" data-value="${subfocus}">
+        <div class="font-semibold text-ink">${subfocus}</div>
+        <div class="text-sm text-slate-500">Add clarity to the plan.</div>
+      </button>
+    `).join("");
+    subfocusOptions.querySelectorAll(".subfocus-card").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        subfocusOptions.querySelectorAll(".subfocus-card").forEach((el) => el.classList.remove("border-skyline", "bg-skyline/5"));
+        btn.classList.add("border-skyline", "bg-skyline/5");
+        session.subfocus = btn.dataset.value;
+        persistToolState(session);
+        if (subfocusContinue) subfocusContinue.disabled = false;
+      });
+    });
+    if (session.subfocus) {
+      subfocusOptions.querySelectorAll(".subfocus-card").forEach((el) => {
+        const isMatch = el.dataset.value === session.subfocus;
+        el.classList.toggle("border-skyline", isMatch);
+        el.classList.toggle("bg-skyline/5", isMatch);
+      });
+      if (subfocusContinue) subfocusContinue.disabled = false;
+    }
+  };
+
+  const subfocusContinue = document.getElementById("subfocus-continue");
+  if (subfocusContinue) {
+    subfocusContinue.addEventListener("click", async () => {
+      if (!toolSession.subfocus) return;
+      await completeStage("subfocus", `Subfocus: <strong>${toolSession.subfocus}</strong>.`);
+      revealStage("questions");
+      initQuestionFlow(toolSession, { completeStage, revealStage });
+    });
+  }
+
+  if (toolSession.focus) {
+    renderSubfocusOptions(toolSession);
+  }
+
+  const mentorButton = document.getElementById("mentor-continue");
+  if (mentorButton) {
+    mentorButton.addEventListener("click", async () => {
+      await completeStage("mentor_response", "Initial plan generated.");
+      await sendToolAction(slug, { action: "flow_complete" });
+      revealStage("chat");
+    });
+  }
+
+  restoreState();
+
+  initChatFlow(toolSession, freeRules);
+};
+
+const buildQuestionSet = (focus) => {
+  if (focus === "Skill Development") {
+    return [...careerCopilotQuestions.skillDevelopment, ...careerCopilotQuestions.common];
+  }
+  if (focus === "Career Switching") {
+    return [...careerCopilotQuestions.careerSwitching, ...careerCopilotQuestions.common];
+  }
+  return [...careerCopilotQuestions.common];
+};
+
+const initQuestionFlow = (session, helpers) => {
+  const questionBody = document.getElementById("question-body");
+  const nextBtn = document.getElementById("question-next");
+  const backBtn = document.getElementById("question-back");
+  const barEl = document.getElementById("question-bar");
+  const questionsLoader = document.getElementById("questions-loader");
+  if (!questionBody || !nextBtn || !backBtn || !barEl) return;
+
+  session.questions = buildQuestionSet(session.focus);
+  session.questionIndex = 0;
+
+  const updateControls = () => {
+    const total = session.questions.length;
+    const index = session.questionIndex;
+    const pct = Math.round(((index + 1) / total) * 100);
+    barEl.style.width = `${pct}%`;
+    backBtn.disabled = index === 0;
+    nextBtn.textContent = index === total - 1 ? "Finish" : "Next";
+
+    const current = session.questions[index];
+    const answer = session.answers[current.key];
+    nextBtn.disabled = !isAnswerValid(current, answer);
+  };
+
+  const renderQuestion = () => {
+    const current = session.questions[session.questionIndex];
+    questionBody.innerHTML = `
+      <h3 class="font-display text-xl text-ink">${current.label}</h3>
+      <div class="mt-4" id="question-input"></div>
+    `;
+    const inputHost = questionBody.querySelector("#question-input");
+    if (!inputHost) return;
+
+    if (current.type === "text") {
+      inputHost.innerHTML = `<input class="w-full rounded-2xl border border-slate-200 px-4 py-3" />`;
+      const input = inputHost.querySelector("input");
+      input.value = session.answers[current.key] || "";
+      input.addEventListener("input", () => {
+        session.answers[current.key] = input.value.trim();
+        persistToolState(session);
+        updateControls();
+      });
+    }
+
+    if (current.type === "textarea") {
+      inputHost.innerHTML = `<textarea class="w-full min-h-[120px] rounded-2xl border border-slate-200 px-4 py-3"></textarea>`;
+      const input = inputHost.querySelector("textarea");
+      input.value = session.answers[current.key] || "";
+      input.addEventListener("input", () => {
+        session.answers[current.key] = input.value.trim();
+        persistToolState(session);
+        updateControls();
+      });
+    }
+
+    if (current.type === "single") {
+      const selected = session.answers[current.key];
+      inputHost.innerHTML = current.options.map((opt) => `
+        <button class="question-option w-full text-left rounded-2xl border border-slate-200 px-4 py-3 hover:border-skyline/70 ${selected === opt ? "border-skyline bg-skyline/5" : ""}" data-value="${opt}">
+          ${opt}
+        </button>
+      `).join("");
+      inputHost.querySelectorAll(".question-option").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          session.answers[current.key] = btn.dataset.value;
+          persistToolState(session);
+          renderQuestion();
+          updateControls();
+        });
+      });
+    }
+
+    if (current.type === "multi") {
+      const selected = session.answers[current.key] || [];
+      inputHost.innerHTML = current.options.map((opt) => `
+        <button class="question-option w-full text-left rounded-2xl border border-slate-200 px-4 py-3 hover:border-skyline/70 ${selected.includes(opt) ? "border-skyline bg-skyline/5" : ""}" data-value="${opt}">
+          ${opt}
+        </button>
+      `).join("");
+      inputHost.querySelectorAll(".question-option").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const value = btn.dataset.value;
+          const updated = new Set(session.answers[current.key] || []);
+          if (updated.has(value)) {
+            updated.delete(value);
+          } else {
+            updated.add(value);
+          }
+          session.answers[current.key] = Array.from(updated);
+          persistToolState(session);
+          renderQuestion();
+          updateControls();
+        });
+      });
+    }
+
+    if (current.type === "slider") {
+      const currentValue = session.answers[current.key] || current.min || 1;
+      inputHost.innerHTML = `
+        <div class="flex items-center gap-4">
+          <input type="range" min="${current.min || 1}" max="${current.max || 10}" step="${current.step || 1}" value="${currentValue}" class="w-full" />
+          <span class="text-slate-700 font-semibold" id="slider-value">${currentValue} hrs</span>
+        </div>
+      `;
+      const input = inputHost.querySelector("input");
+      const valueEl = inputHost.querySelector("#slider-value");
+      session.answers[current.key] = Number(currentValue);
+      input.addEventListener("input", () => {
+        session.answers[current.key] = Number(input.value);
+        valueEl.textContent = `${input.value} hrs`;
+        persistToolState(session);
+        updateControls();
+      });
+    }
+
+    updateControls();
+  };
+
+  backBtn.addEventListener("click", () => {
+    if (session.questionIndex > 0) {
+      session.questionIndex -= 1;
+      renderQuestion();
+    }
+  });
+
+  nextBtn.addEventListener("click", async () => {
+    const total = session.questions.length;
+    if (session.questionIndex < total - 1) {
+      session.questionIndex += 1;
+      renderQuestion();
+      return;
+    }
+
+    questionBody.innerHTML = `<p class="text-slate-600">Generating your plan…</p>`;
+    if (questionsLoader) questionsLoader.classList.remove("hidden");
+    nextBtn.disabled = true;
+    backBtn.disabled = true;
+    const mentorData = await fetchMentorResponse(session);
+    if (!mentorData) {
+      questionBody.innerHTML = `<p class="text-red-500">We couldn’t generate a response. Please try again.</p>`;
+      if (questionsLoader) questionsLoader.classList.add("hidden");
+      nextBtn.disabled = false;
+      backBtn.disabled = false;
+      return;
+    }
+
+    session.mentorResponse = mentorData;
+    persistToolState(session);
+    renderRecap();
+    if (helpers?.revealStage) {
+      helpers.revealStage("mentor_response");
+    }
+    const mentor = document.getElementById("mentor-response");
+    if (mentor) mentor.innerHTML = renderMentorResponse(mentorData);
+    if (questionsLoader) questionsLoader.classList.add("hidden");
+    if (helpers?.completeStage) {
+      helpers.completeStage("questions", "Context captured for your plan.").catch(() => {});
+    }
+  });
+
+  renderQuestion();
+};
+
+const initChatFlow = (session, freeRules) => {
+  const chatLog = document.getElementById("chat-log");
+  const chatInput = document.getElementById("chat-input");
+  const chatSend = document.getElementById("chat-send");
+  const chatMic = document.getElementById("chat-mic");
+  const chatMicConfirm = document.getElementById("chat-mic-confirm");
+  const chatMicCancel = document.getElementById("chat-mic-cancel");
+  const micWaveform = document.getElementById("mic-waveform");
+  const micStatus = document.getElementById("mic-status");
+  if (!chatLog || !chatInput || !chatSend || !chatMic || !chatMicConfirm || !chatMicCancel || !micWaveform || !micStatus) return;
+
+  updateChatLimits(session, freeRules);
+
+  const appendMessage = (role, text, shouldPersist = false) => {
+    const bubble = document.createElement("div");
+    bubble.className = `rounded-2xl px-4 py-3 ${role === "user" ? "bg-skyline/10 text-ink ml-auto" : "bg-white border border-slate-200 text-slate-700"}`;
+    if (role === "user") {
+      bubble.textContent = text;
+    } else {
+      bubble.innerHTML = renderMarkdownToHTML(text);
+    }
+    chatLog.appendChild(bubble);
+    chatLog.scrollTop = chatLog.scrollHeight;
+    if (shouldPersist) {
+      const historyRole = role === "user" ? "user" : "assistant";
+      session.chatHistory = trimClientChatHistory([
+        ...(session.chatHistory || []),
+        { role: historyRole, content: text }
+      ]);
+      persistToolState(session);
+    }
+  };
+
+  const renderHistory = () => {
+    (session.chatHistory || []).forEach((item) => {
+      const role = item.role === "user" ? "user" : "bot";
+      appendMessage(role, item.content, false);
+    });
+  };
+
+  renderHistory();
+
+  const sendMessage = async () => {
+    if (!state.user && freeRules.require_sign_in) {
+      showOverlay({
+        title: "Sign in required",
+        message: "Continue with Google to keep chatting.",
+        primary: { text: "Continue with Google", action: promptGoogleLogin }
+      });
+      return;
+    }
+    const content = chatInput.value.trim();
+    if (!content) return;
+
+    chatSend.disabled = true;
+    chatMic.disabled = true;
+
+    const result = await sendToolAction(session.slug, {
+      action: "response",
+      used_audio: session.pendingAudio
+    });
+    session.pendingAudio = false;
+
+    if (!result) {
+      chatSend.disabled = false;
+      chatMic.disabled = false;
+      return;
+    }
+    if (!result.allowed) {
+      chatSend.disabled = false;
+      chatMic.disabled = false;
+      if (result?.reason === "FREE_AUDIO_LIMIT") {
+        showToolPaywall("Voice mode locked", "You’ve used your free voice input. Upgrade to keep using voice guidance.");
+      } else {
+        showToolPaywall("Continue your career plan", "You’ve used your 2 free follow-ups. Upgrade to keep chatting.");
+      }
+      return;
+    }
+
+    session.usage = result.usage_state || session.usage;
+    session.entitlementActive = Boolean(result.entitlement_active);
+    updateChatLimits(session, freeRules);
+
+    appendMessage("user", content, false);
+    chatInput.value = "";
+    const typingBubble = document.createElement("div");
+    typingBubble.className = "rounded-2xl px-4 py-3 bg-white border border-slate-200 text-slate-500 flex items-center gap-2";
+    typingBubble.innerHTML = `
+      <span class="h-4 w-4 rounded-full border-2 border-slate-300 border-t-skyline animate-spin"></span>
+      <span>Thinking…</span>
+    `;
+    chatLog.appendChild(typingBubble);
+    chatLog.scrollTop = chatLog.scrollHeight;
+    const reply = await fetchChatResponse(session, content);
+    typingBubble.remove();
+    if (!reply) {
+      chatSend.disabled = false;
+      chatMic.disabled = false;
+      showToast("Chat response failed. Try again.");
+      return;
+    }
+    session.chatHistory = trimClientChatHistory([
+      ...(session.chatHistory || []),
+      { role: "user", content },
+      { role: "assistant", content: reply }
+    ]);
+    persistToolState(session);
+    appendMessage("bot", reply, false);
+    chatSend.disabled = false;
+    chatMic.disabled = false;
+  };
+
+  chatSend.addEventListener("click", sendMessage);
+  chatInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      sendMessage();
+    }
+  });
+
+  let micRecorder = null;
+  let micStream = null;
+  let micTimeout = null;
+  let audioChunks = [];
+  let audioContext = null;
+  let analyser = null;
+  let dataArray = null;
+  let rafId = null;
+  let micCanceled = false;
+
+  const startWaveform = () => {
+    micWaveform.classList.remove("hidden");
+    const bars = micWaveform.querySelectorAll("span");
+    const tick = () => {
+      if (!analyser || !dataArray) return;
+      analyser.getByteTimeDomainData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i += 1) {
+        const delta = dataArray[i] - 128;
+        sum += Math.abs(delta);
+      }
+      const avg = sum / dataArray.length;
+      const level = Math.min(Math.max(avg / 2, 6), 28);
+      bars.forEach((bar, index) => {
+        const variance = (index % 2 === 0 ? 0.7 : 1.1);
+        bar.style.height = `${Math.min(level * variance, 32)}px`;
+      });
+      rafId = window.requestAnimationFrame(tick);
+    };
+    tick();
+  };
+
+  const stopWaveform = () => {
+    if (rafId) {
+      window.cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    micWaveform.classList.add("hidden");
+  };
+
+  const resetMicControls = () => {
+    chatMic.classList.remove("hidden");
+    chatMicConfirm.classList.add("hidden");
+    chatMicCancel.classList.add("hidden");
+  };
+
+  const showActiveMicControls = () => {
+    chatMic.classList.add("hidden");
+    chatMicConfirm.classList.remove("hidden");
+    chatMicCancel.classList.remove("hidden");
+  };
+
+  const stopStream = () => {
+    if (!micStream) return;
+    micStream.getTracks().forEach((track) => track.stop());
+    micStream = null;
+  };
+
+  const stopAudioContext = () => {
+    if (audioContext) {
+      audioContext.close();
+      audioContext = null;
+    }
+    analyser = null;
+    dataArray = null;
+  };
+
+  const stopRecorder = () => {
+    if (micTimeout) {
+      clearTimeout(micTimeout);
+      micTimeout = null;
+    }
+    if (micRecorder && micRecorder.state === "recording") {
+      micRecorder.stop();
+    }
+  };
+
+  const startMic = async () => {
+    if (!state.user && freeRules.require_sign_in) {
+      showOverlay({
+        title: "Sign in required",
+        message: "Sign in to use voice input.",
+        primary: { text: "Continue with Google", action: promptGoogleLogin }
+      });
+      return;
+    }
+    const audioLeft = (freeRules.max_free_audio_inputs || 0) - (session.usage?.free_audio_inputs_used || 0);
+    if (!session.entitlementActive && audioLeft <= 0) {
+      showToolPaywall("Voice mode locked", "You’ve used your free voice input. Upgrade to keep using voice guidance.");
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      showToast("Voice input is not supported in this browser.");
+      return;
+    }
+
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      showToast("Unable to access your microphone.");
+      return;
+    }
+
+    audioChunks = [];
+    micCanceled = false;
+    showActiveMicControls();
+    micRecorder = new MediaRecorder(micStream);
+    micRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+    micRecorder.onstop = async () => {
+      stopWaveform();
+      stopStream();
+      stopAudioContext();
+      if (micCanceled) {
+        micStatus.classList.add("hidden");
+        micStatus.textContent = "Listening…";
+        resetMicControls();
+        return;
+      }
+
+      micStatus.textContent = "Transcribing…";
+      const blob = new Blob(audioChunks, { type: micRecorder.mimeType || "audio/webm" });
+      const transcript = await transcribeToolAudio(session, blob);
+      micStatus.classList.add("hidden");
+      micStatus.textContent = "Listening…";
+      if (transcript) {
+        chatInput.value = transcript;
+        session.pendingAudio = true;
+        persistToolState(session);
+        chatInput.focus();
+      }
+      resetMicControls();
+    };
+
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(micStream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    source.connect(analyser);
+
+    micRecorder.start();
+    micStatus.classList.remove("hidden");
+    startWaveform();
+    micTimeout = setTimeout(stopRecorder, 10000);
+  };
+
+  chatMic.addEventListener("click", startMic);
+  chatMicConfirm.addEventListener("click", () => {
+    micCanceled = false;
+    stopRecorder();
+  });
+  chatMicCancel.addEventListener("click", () => {
+    micCanceled = true;
+    stopRecorder();
+  });
+};
+
+const updateChatLimits = (session, freeRules) => {
+  const limitsEl = document.getElementById("chat-limits");
+  const micBtn = document.getElementById("chat-mic");
+  const micConfirm = document.getElementById("chat-mic-confirm");
+  const micCancel = document.getElementById("chat-mic-cancel");
+  if (!limitsEl || !micBtn || !micConfirm || !micCancel) return;
+
+  if (session.entitlementActive) {
+    limitsEl.textContent = "Unlimited follow-ups • Unlimited voice";
+    micBtn.disabled = false;
+    micBtn.classList.remove("opacity-60", "cursor-not-allowed");
+    micConfirm.disabled = false;
+    micCancel.disabled = false;
+    return;
+  }
+
+  const responsesLeft = Math.max((freeRules.max_free_responses || 0) - (session.usage?.free_user_responses_used || 0), 0);
+  const audioLeft = Math.max((freeRules.max_free_audio_inputs || 0) - (session.usage?.free_audio_inputs_used || 0), 0);
+  limitsEl.textContent = `${responsesLeft} free follow-ups left • ${audioLeft} voice input left`;
+
+  if (audioLeft <= 0) {
+    micBtn.disabled = true;
+    micBtn.classList.add("opacity-60", "cursor-not-allowed");
+    micConfirm.disabled = true;
+    micCancel.disabled = true;
+  } else {
+    micBtn.disabled = false;
+    micBtn.classList.remove("opacity-60", "cursor-not-allowed");
+    micConfirm.disabled = false;
+    micCancel.disabled = false;
+  }
+};
+
+const isAnswerValid = (question, answer) => {
+  if (question.type === "multi") {
+    return Array.isArray(answer) && answer.length > 0;
+  }
+  if (question.type === "slider") {
+    return typeof answer === "number";
+  }
+  return Boolean(answer);
+};
+
+const sendToolAction = async (slug, payload) => {
+  if (!state.token) return null;
+  try {
+    return await fetchJSON(`${API.tools}/${slug}/action`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    showToast(err.message || "Something went wrong.");
+    return null;
+  }
+};
+
+const uploadResumeForAnalysis = async (slug, file) => {
+  if (!state.token) return null;
+  const formData = new FormData();
+  formData.append("file", file);
+  try {
+    const res = await fetch(`${API.tools}/${slug}/resume`, {
+      method: "POST",
+      headers: authHeader(),
+      body: formData
+    });
+    if (!res.ok) {
+      let message = `Request failed: ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data?.error) message = data.error;
+      } catch (err) {
+        // ignore parse errors
+      }
+      throw new Error(message);
+    }
+    return res.json();
+  } catch (err) {
+    showToast(err.message || "Resume analysis failed.");
+    return null;
+  }
+};
+
+const applyResumeAnalysis = (analysis) => {
+  if (!analysis) return;
+  const scoreEl = document.getElementById("ats-score");
+  const readabilityEl = document.getElementById("ats-readability");
+  const winsEl = document.getElementById("ats-wins");
+  if (scoreEl) scoreEl.textContent = analysis.ats_score ?? analysis.ATSScore ?? 0;
+  if (readabilityEl) readabilityEl.textContent = analysis.readability_summary || analysis.ReadabilitySummary || "Analysis ready.";
+  if (winsEl) {
+    const wins = analysis.quick_wins || analysis.QuickWins || [];
+    winsEl.innerHTML = wins.map((item) => `<li>${item}</li>`).join("") || "<li>Review your top accomplishments for impact.</li>";
+  }
+};
+
+const showToolPaywall = (title, message) => {
+  showOverlay({
+    title,
+    message,
+    primary: { text: "Upgrade", action: () => (window.location.href = "/pricing") },
+    secondary: { text: "Not now" }
+  });
 };
 
 const updateNavState = () => {
@@ -1887,6 +3418,34 @@ const setStoredEntitlement = (entitlement) => {
 
 const clearStoredEntitlement = () => localStorage.removeItem("entitlement");
 
+const getToolStateKey = (slug) => `tool_state:${slug}`;
+
+const getStoredToolState = (slug) => {
+  if (!slug) return null;
+  const raw = sessionStorage.getItem(getToolStateKey(slug));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+};
+
+const setStoredToolState = (slug, value) => {
+  if (!slug) return;
+  if (!value) {
+    sessionStorage.removeItem(getToolStateKey(slug));
+    return;
+  }
+  sessionStorage.setItem(getToolStateKey(slug), JSON.stringify(value));
+};
+
+const clearStoredToolState = (slug) => {
+  if (!slug) return;
+  sessionStorage.removeItem(getToolStateKey(slug));
+};
+
 const getOrCreateAnonId = () => {
   const key = "anon_id";
   let id = localStorage.getItem(key);
@@ -1895,6 +3454,11 @@ const getOrCreateAnonId = () => {
     localStorage.setItem(key, id);
   }
   return id;
+};
+
+const shouldResumeToolState = () => {
+  const params = new URLSearchParams(window.location.search || "");
+  return params.get("resume") === "1" || params.get("resume") === "true";
 };
 
 const openCheckout = async (planCode) => {
@@ -1959,14 +3523,17 @@ const showPaywallGate = () => {
   });
 };
 
-const showOverlay = ({ title, message, primary }) => {
+const showOverlay = ({ title, message, primary, secondary }) => {
   const overlay = document.createElement("div");
   overlay.className = "fixed inset-0 bg-black/70 flex items-center justify-center z-50";
   overlay.innerHTML = `
     <div class="max-w-md w-full bg-white text-ink rounded-3xl p-8 border border-slate-200">
       <h3 class="font-display text-2xl">${title}</h3>
       <p class="mt-3 text-slate-600">${message}</p>
-      <button class="mt-6 w-full rounded-full bg-skyline text-white py-3 font-semibold" id="overlay-primary">${primary.text}</button>
+      <div class="mt-6 flex flex-col gap-3">
+        <button class="w-full rounded-full bg-skyline text-white py-3 font-semibold" id="overlay-primary">${primary.text}</button>
+        ${secondary ? `<button class="w-full rounded-full border border-slate-200 py-3 text-slate-700" id="overlay-secondary">${secondary.text}</button>` : ""}
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -1974,6 +3541,15 @@ const showOverlay = ({ title, message, primary }) => {
     primary.action();
     overlay.remove();
   });
+  if (secondary) {
+    const secondaryBtn = overlay.querySelector("#overlay-secondary");
+    if (secondaryBtn) {
+      secondaryBtn.addEventListener("click", () => {
+        if (secondary.action) secondary.action();
+        overlay.remove();
+      });
+    }
+  }
 };
 
 const showToast = (message) => {

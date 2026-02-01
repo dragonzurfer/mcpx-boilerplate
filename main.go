@@ -35,6 +35,16 @@ func main() {
 		logger.Fatalf("error [main]: db init failed: %v", err)
 	}
 
+	if err := store.EnsureDefaultTools(stores.DefaultTools()); err != nil {
+		logger.Fatalf("error [tools]: %v", err)
+	}
+
+	geminiClient := services.NewGeminiClient(services.GeminiClientInput{
+		APIKey:  strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		Model:   getEnv("GEMINI_MODEL", ""),
+		BaseURL: getEnv("GEMINI_API_BASE", ""),
+	})
+
 	siteName := getEnv("SITE_NAME", "explore")
 	siteURL := getEnv("SITE_URL", "https://explore.mcpx.in")
 	primaryColor := getEnv("PRIMARY_COLOR", "#38bdf8")
@@ -92,6 +102,13 @@ func main() {
 	promosHandler := &routes.PromosHandler{Store: store}
 	promosHandler.Register(api)
 
+	toolsHandler := &routes.ToolsHandler{
+		Store:   store,
+		Service: &services.ToolService{Store: store},
+		AI:      geminiClient,
+	}
+	toolsHandler.Register(api)
+
 	paymentsHandler := &routes.PaymentsHandler{Store: store, Plans: plans, Logger: logger}
 	paymentsHandler.RegisterPublic(api)
 
@@ -121,6 +138,9 @@ func main() {
 
 	adminPostAnalytics := &routes.AdminPostAnalyticsHandler{Store: store}
 	adminPostAnalytics.Register(admin)
+
+	adminTools := &routes.AdminToolsHandler{Store: store}
+	adminTools.Register(admin)
 
 	adminUsers := &routes.AdminUsersHandler{Store: store}
 	adminUsers.Register(admin)
@@ -176,6 +196,19 @@ func startBackgroundJobs(store *stores.Store, funnelService *services.FunnelServ
 			<-ticker.C
 		}
 	}()
+
+	go func() {
+		interval := 24 * time.Hour
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			now := time.Now().UTC()
+			if err := runToolAnalyticsRollup(store, now); err != nil {
+				logger.Printf("error [tool_analytics]: %v", err)
+			}
+			<-ticker.C
+		}
+	}()
 }
 
 func loadEnv() {
@@ -203,6 +236,15 @@ func runPostAnalyticsRollup(store *stores.Store, now time.Time) error {
 	}
 	retention := analyticsRetentionDays(cfg.ScoringWindowDays)
 	return store.RunPostAnalyticsRollup(now, retention)
+}
+
+func runToolAnalyticsRollup(store *stores.Store, now time.Time) error {
+	cfg, err := store.GetFunnelConfig()
+	if err != nil {
+		return err
+	}
+	retention := analyticsRetentionDays(cfg.ScoringWindowDays)
+	return store.RunToolAnalyticsRollup(now, retention)
 }
 
 func analyticsRetentionDays(scoringWindow int) int {

@@ -27,6 +27,8 @@ func LoadTemplates() (map[string]*template.Template, error) {
 		"home":                 filepath.Join("web", "templates", "home.html"),
 		"post":                 filepath.Join("web", "templates", "post.html"),
 		"pricing":              filepath.Join("web", "templates", "pricing.html"),
+		"tools":                filepath.Join("web", "templates", "tools.html"),
+		"tool":                 filepath.Join("web", "templates", "tool.html"),
 		"courses":              filepath.Join("web", "templates", "courses.html"),
 		"course":               filepath.Join("web", "templates", "course.html"),
 		"account":              filepath.Join("web", "templates", "account.html"),
@@ -35,6 +37,7 @@ func LoadTemplates() (map[string]*template.Template, error) {
 		"admin_post_analytics": filepath.Join("web", "templates", "admin_post_analytics.html"),
 		"admin_funnel":         filepath.Join("web", "templates", "admin_funnel.html"),
 		"admin_promos":         filepath.Join("web", "templates", "admin_promos.html"),
+		"admin_tools":          filepath.Join("web", "templates", "admin_tools.html"),
 		"admin_users":          filepath.Join("web", "templates", "admin_users.html"),
 		"admin_settings":       filepath.Join("web", "templates", "admin_settings.html"),
 		"admin_analytics":      filepath.Join("web", "templates", "admin_analytics.html"),
@@ -55,6 +58,8 @@ func (h *PageHandler) Register(r *gin.Engine) {
 	r.GET("/", h.home)
 	r.GET("/post/:slug", h.post)
 	r.GET("/pricing", h.pricing)
+	r.GET("/tools", h.tools)
+	r.GET("/tools/:slug", h.tool)
 	r.GET("/courses", h.courses)
 	r.GET("/course/:slug", h.course)
 	r.GET("/account", h.account)
@@ -63,6 +68,7 @@ func (h *PageHandler) Register(r *gin.Engine) {
 	r.GET("/admin/posts/:id/analytics", h.adminPostAnalytics)
 	r.GET("/admin/funnel", h.adminFunnel)
 	r.GET("/admin/promos", h.adminPromos)
+	r.GET("/admin/tools", h.adminTools)
 	r.GET("/admin/users", h.adminUsers)
 	r.GET("/admin/settings", h.adminSettings)
 	r.GET("/admin/analytics", h.adminAnalytics)
@@ -100,6 +106,46 @@ func (h *PageHandler) pricing(c *gin.Context) {
 	h.renderTemplate(c, "pricing", data)
 }
 
+func (h *PageHandler) tools(c *gin.Context) {
+	settings := h.resolveSiteSettings()
+	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
+	meta.Title = "Tools | " + meta.SiteName
+	meta.Description = "Guided tools for career planning, resume feedback, and skill growth."
+	if settings.SiteURL != "" {
+		meta.CanonicalURL = settings.SiteURL + "/tools"
+	}
+	meta.JSONLD = ""
+
+	data := pageData{Meta: meta, JSONLD: template.JS(""), Theme: resolveTheme(settings)}
+	h.renderTemplate(c, "tools", data)
+}
+
+func (h *PageHandler) tool(c *gin.Context) {
+	slug := strings.TrimSpace(c.Param("slug"))
+	if slug == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "slug required"})
+		return
+	}
+
+	tool, err := h.Store.GetToolBySlug(slug)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "tool not found"})
+		return
+	}
+
+	settings := h.resolveSiteSettings()
+	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
+	meta.Title = tool.Name + " | " + meta.SiteName
+	meta.Description = "A guided career workflow with resume analysis, focus selection, and expert follow-ups."
+	if settings.SiteURL != "" {
+		meta.CanonicalURL = settings.SiteURL + "/tools/" + tool.Slug
+	}
+	meta.JSONLD = ""
+
+	data := pageData{Meta: meta, JSONLD: template.JS(""), Theme: resolveTheme(settings)}
+	h.renderTemplate(c, "tool", data)
+}
+
 func (h *PageHandler) adminAnalytics(c *gin.Context) {
 	settings := h.resolveSiteSettings()
 	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
@@ -112,6 +158,20 @@ func (h *PageHandler) adminAnalytics(c *gin.Context) {
 
 	data := pageData{Meta: meta, JSONLD: template.JS(meta.JSONLD), Theme: resolveTheme(settings)}
 	h.renderTemplate(c, "admin_analytics", data)
+}
+
+func (h *PageHandler) adminTools(c *gin.Context) {
+	settings := h.resolveSiteSettings()
+	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
+	meta.Title = buildAdminTitle(meta.SiteName)
+	meta.Description = "Admin tool configuration for gating and tracking."
+	meta.Robots = "noindex,nofollow"
+	if settings.SiteURL != "" {
+		meta.CanonicalURL = settings.SiteURL + "/admin/tools"
+	}
+
+	data := pageData{Meta: meta, JSONLD: template.JS(meta.JSONLD), Theme: resolveTheme(settings)}
+	h.renderTemplate(c, "admin_tools", data)
 }
 
 func (h *PageHandler) courses(c *gin.Context) {

@@ -11,6 +11,8 @@ Explore is a self-hosted newsletter + courses platform with:
 - Daily post analytics rollup (unique impressions + engagement aggregates)
 - Manual Razorpay renewals (no auto-renew)
 - SEO-first rendering (OG, JSON-LD, sitemap, RSS)
+- Guided tools with per-user usage limits (Career Copilot) using Gemini for resume analysis, mentor responses, chat replies, and voice transcription
+- Tool analytics rollups (daily aggregation of tool events)
 
 ## Request flow
 
@@ -20,13 +22,17 @@ HTTP -> Logger/Recovery
      -> /api: OptionalAuth -> RateLimiter
         -> /api/auth/login
         -> /api/posts, /api/courses (public + optional auth)
+        -> /api/tools, /api/tools/:slug (public + optional auth)
         -> /api/events/batch, /api/promos/decide
         -> /api/plans (public)
         -> /api/payments/webhook (public, signed)
         -> /api/* (authed): Auth -> RateLimiter
             -> /api/me
+            -> /api/tools/:slug/action
+            -> /api/tools/:slug/resume, /mentor, /chat, /transcribe
             -> /api/payments/create-order, /confirm
         -> /api/admin/*: Auth -> RequireAdminRole
+            -> /api/admin/tools (tool gating + tracking settings)
 ```
 
 ## Core services
@@ -36,6 +42,7 @@ HTTP -> Logger/Recovery
 - **FunnelService**: compute score + stage, periodic recalculation job.
 - **PromoService**: decision engine (trial-only, caps/cooldowns).
 - **PaymentService**: Razorpay order + webhook verification, entitlement updates.
+- **ToolService**: tool usage gating (free limits, stage completion, event logging).
 - **SEO**: meta builder, OG image generation, sitemap/robots/RSS.
 - **Admin analytics UI**: dashboard pulls funnel + promo metrics from `/api/admin/analytics/*` and per-post analytics from `/api/admin/analytics/posts/*`.
 
@@ -47,6 +54,8 @@ HTTP -> Logger/Recovery
 - `events`, `post_impressions`, `post_daily_metrics`, `post_promo_daily_metrics`, `user_metrics`
 - `funnel_config`, `funnel_event_weights`, `funnel_stage_thresholds`
 - `promos`, `promo_variants`, `promo_decisions`, `promo_impressions`, `promo_clicks`
+- `tools`, `tool_usages`, `tool_events`
+- `tool_daily_metrics`
 - `payments`, `entitlements`
 - `site_settings`, `admin_audit_logs`
 
