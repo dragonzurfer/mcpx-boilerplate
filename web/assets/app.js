@@ -11,6 +11,10 @@ const state = {
   toolConfig: null
 };
 
+const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia
+  ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  : false;
+
 const selectors = {
   page: () => document.querySelector("[data-page]"),
   postsGrid: () => document.getElementById("posts-grid"),
@@ -231,7 +235,7 @@ const renderTool = async () => {
   if (titleEl) titleEl.textContent = title;
   if (subtitleEl) subtitleEl.textContent = subtitle;
   if (tagsEl) {
-    tagsEl.innerHTML = tags.map((tag) => `<span class="px-3 py-1 rounded-full bg-white border border-slate-200 text-xs text-slate-600">${tag}</span>`).join("");
+    tagsEl.innerHTML = tags.map((tag) => `<span class="tool-tag">${tag}</span>`).join("");
   }
 
   if (slug === "career-copilot") {
@@ -1462,6 +1466,36 @@ const renderPlanCard = (plan) => {
   `;
 };
 
+const careerCopilotFocusIcons = {
+  "Career Growth": "trending-up",
+  "Skill Development": "book-open",
+  "Career Switching": "shuffle",
+  "Resume Improvement": "file-text",
+  "Interview Preparation": "message-circle",
+  "General Career Advice": "compass"
+};
+
+const careerCopilotFocusDescriptions = {
+  "Career Growth": "Advance in your current role and scale your impact.",
+  "Skill Development": "Master new technologies and methodologies in your field.",
+  "Career Switching": "Pivot your career path to a completely new industry.",
+  "Resume Improvement": "Optimize your profile for ATS and hiring managers.",
+  "Interview Preparation": "Practice behavioral and technical interview scenarios.",
+  "General Career Advice": "Get holistic guidance on navigating your professional life."
+};
+
+const careerCopilotFocusTones = {
+  "Career Growth": "is-slate",
+  "Skill Development": "is-emerald",
+  "Career Switching": "is-indigo",
+  "Resume Improvement": "is-amber",
+  "Interview Preparation": "is-slate",
+  "General Career Advice": "is-emerald"
+};
+
+const careerCopilotSubfocusIcon = "target";
+const careerCopilotSubfocusTone = "is-slate";
+
 const careerCopilotFocuses = [
   "Career Growth",
   "Skill Development",
@@ -1517,6 +1551,14 @@ const updateResumeState = (session, analysis) => {
   persistToolState(session);
 };
 
+const renderATSScoreRing = (score) => {
+  const ring = document.querySelector(".ats-score-ring");
+  if (!ring) return;
+  const safeScore = Number.isFinite(Number(score)) ? Math.max(0, Math.min(100, Number(score))) : 0;
+  const degrees = Math.round((safeScore / 100) * 360);
+  ring.style.background = `conic-gradient(#38bdf8 0deg, #0ea5e9 ${degrees}deg, rgba(226, 232, 240, 0.9) ${degrees}deg 360deg)`;
+};
+
 const handleToolAIError = (err, fallback) => {
   const message = err?.message || "";
   if (message === "PAID_REQUIRED") {
@@ -1545,6 +1587,12 @@ const escapeHTML = (value) => {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+};
+
+const refreshLucide = () => {
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
+  }
 };
 
 const formatInlineMarkdown = (value) => {
@@ -1721,34 +1769,30 @@ const renderMentorResponse = (mentor) => {
 
   const buildList = (items) => {
     if (!items || items.length === 0) return `<p class="text-sm text-slate-500">No data yet.</p>`;
-    return `<ul class="mt-2 list-disc list-inside text-slate-600">${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+    return `<ul class="mt-3 list-disc list-inside text-slate-600">${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
   };
 
+  const buildSection = (title, items, icon, toneClass) => `
+    <div class="tool-mentor-card">
+      <div class="tool-mentor-header">
+        <span class="tool-mentor-icon ${toneClass}">
+          <i data-lucide="${icon}"></i>
+        </span>
+        <p class="font-semibold text-ink">${title}</p>
+      </div>
+      ${buildList(items)}
+    </div>
+  `;
+
   return `
-    ${responseText ? `<p class="text-slate-700">${responseText}</p>` : ""}
-    <div class="mt-4">
-      <p class="font-semibold text-ink">Summary</p>
-      ${buildList(summary)}
-    </div>
-    <div class="mt-4">
-      <p class="font-semibold text-ink">Strengths</p>
-      ${buildList(strengths)}
-    </div>
-    <div class="mt-4">
-      <p class="font-semibold text-ink">Gaps to close</p>
-      ${buildList(gaps)}
-    </div>
-    <div class="mt-4">
-      <p class="font-semibold text-ink">7-day plan</p>
-      ${buildList(plan7)}
-    </div>
-    <div class="mt-4">
-      <p class="font-semibold text-ink">30-day plan</p>
-      ${buildList(plan30)}
-    </div>
-    <div class="mt-4">
-      <p class="font-semibold text-ink">Resources</p>
-      ${buildList(resources)}
+    ${responseText ? `<div class="tool-mentor-quote">${responseText}</div>` : ""}
+    <div class="mt-6 tool-mentor-grid">
+      ${buildSection("Summary", summary, "file-text", "is-slate")}
+      ${buildSection("Strengths", strengths, "award", "is-emerald")}
+      ${buildSection("Gaps to close", gaps, "alert-circle", "is-amber")}
+      ${buildSection("7-day plan", plan7, "clock", "is-slate")}
+      ${buildSection("30-day plan", plan30, "calendar", "is-indigo")}
+      ${buildSection("Resources", resources, "book-open", "is-emerald")}
     </div>
   `;
 };
@@ -1776,6 +1820,7 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
   });
 
   const stageContainer = document.getElementById("tool-stages");
+  const toolMainShell = document.getElementById("tool-shell-main");
   const completedContainer = document.getElementById("tool-completed");
   const recapContainer = document.getElementById("tool-recap");
   const progressBar = document.getElementById("tool-progress-bar");
@@ -1851,43 +1896,116 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     if (progressLabel) progressLabel.textContent = `${pct}%`;
   };
 
+  let activeStageKey = null;
+
   const setActiveStage = (key) => {
+    if (activeStageKey === key) return;
+    activeStageKey = key;
+    if (stageContainer) {
+      stageContainer.classList.toggle("is-chat-stage", key === "chat");
+    }
+    if (toolMainShell) {
+      toolMainShell.classList.toggle("is-chat-stage", key === "chat");
+    }
     stageCards.forEach((card) => {
-      card.classList.toggle("hidden", card.dataset.stage !== key);
+      const isTarget = card.dataset.stage === key;
+      if (isTarget) {
+        card.classList.remove("hidden");
+        if (window.motion && !prefersReducedMotion) {
+          window.motion.animate(card, { opacity: [0, 1], transform: ["translateY(18px)", "translateY(0px)"] }, { duration: 0.45, easing: "ease-out" });
+        }
+        return;
+      }
+
+      if (card.classList.contains("hidden")) return;
+
+      if (window.motion && !prefersReducedMotion) {
+        window.motion.animate(card, { opacity: [1, 0], transform: ["translateY(0px)", "translateY(-10px)"] }, { duration: 0.25, easing: "ease-in" })
+          .finished.then(() => {
+            card.classList.add("hidden");
+          })
+          .catch(() => {
+            card.classList.add("hidden");
+          });
+        return;
+      }
+
+      card.classList.add("hidden");
     });
     updateProgress(key);
-    if (window.motion) {
-      const node = stageNodes[key];
-      if (node) {
-        window.motion.animate(node, { opacity: [0, 1], transform: ["translateY(12px)", "translateY(0px)"] }, { duration: 0.4 });
-      }
-    }
+    renderCompletedStages();
+    renderRecap();
   };
 
   const renderCompletedStages = () => {
     if (!completedContainer) return;
+    const focusStatus = document.getElementById("focus-status-chips");
+    const useFocusStatus = activeStageKey === "focus" && focusStatus;
+    const targetContainer = useFocusStatus ? focusStatus : completedContainer;
+    if (!targetContainer) return;
+
     completedContainer.innerHTML = "";
-    const latestKey = [...stages].reverse().find((key) => Boolean(toolSession.stageSummaries?.[key]));
-    if (!latestKey) {
+    if (focusStatus) focusStatus.innerHTML = "";
+    const completedKeys = stages.filter((key) => Boolean(toolSession.stageSummaries?.[key]));
+    completedContainer.classList.remove("hidden");
+    if (focusStatus) focusStatus.classList.remove("hidden");
+    const completedLabels = {
+      upload: "Resume uploaded",
+      analysis: "ATS score saved",
+      focus: "Track selected",
+      subfocus: "Goal refined",
+      questions: "Context captured",
+      mentor_response: "Plan generated",
+      chat: "Chat active"
+    };
+
+    const activeLabels = {
+      upload: "Uploading resume",
+      analysis: "Analyzing resume",
+      focus: "Selecting track",
+      subfocus: "Refining goal",
+      questions: "Answering questions",
+      mentor_response: "Generating plan",
+      chat: "In follow-up chat"
+    };
+
+    const activeKey = activeStageKey;
+    const hasCompleted = completedKeys.length > 0;
+    const shouldShow = hasCompleted || (activeKey && activeKey !== "upload");
+    if (!shouldShow) {
       completedContainer.classList.add("hidden");
+      if (focusStatus) focusStatus.classList.add("hidden");
       return;
     }
-    completedContainer.classList.remove("hidden");
-    const summary = stripHTML(toolSession.stageSummaries[latestKey]);
-    const label = stageLabels[latestKey] || latestKey.replace(/_/g, " ");
-    const card = document.createElement("div");
-    card.className = "rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-slate-600 flex items-center gap-2 max-w-full";
-    const labelEl = document.createElement("span");
-    labelEl.className = "text-xs uppercase tracking-wide text-slate-400";
-    labelEl.textContent = label;
-    const summaryEl = document.createElement("span");
-    summaryEl.className = "text-sm truncate";
-    summaryEl.textContent = summary;
-    summaryEl.title = summary;
-    card.appendChild(labelEl);
-    card.appendChild(summaryEl);
-    completedContainer.appendChild(card);
-    animateIn(completedContainer.children);
+
+    const chipKeys = [...completedKeys];
+    if (activeKey && !completedKeys.includes(activeKey)) {
+      chipKeys.push(activeKey);
+    }
+
+    chipKeys.forEach((key) => {
+      const isActive = key === activeKey && !completedKeys.includes(key);
+      const label = isActive ? (activeLabels[key] || stageLabels[key]) : (completedLabels[key] || stageLabels[key]);
+      const chip = document.createElement("div");
+      chip.className = `tool-chip ${isActive ? "is-active" : ""}`;
+      const icon = document.createElement("span");
+      icon.className = `tool-chip-icon ${isActive ? "is-active" : "is-complete"}`;
+      icon.innerHTML = `<i data-lucide="${isActive ? "circle" : "check"}"></i>`;
+      const text = document.createElement("span");
+      text.className = "tool-chip-text";
+      text.textContent = label;
+      chip.appendChild(icon);
+      chip.appendChild(text);
+      targetContainer.appendChild(chip);
+    });
+    refreshLucide();
+    animateIn(targetContainer.children);
+
+    if (useFocusStatus) {
+      completedContainer.classList.add("hidden");
+    } else if (focusStatus) {
+      focusStatus.classList.add("hidden");
+    }
   };
 
   const renderRecap = () => {
@@ -1898,6 +2016,8 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
       return;
     }
 
+    recapContainer.classList.toggle("dossier-mode", activeStageKey === "chat");
+
     if (completedContainer) {
       completedContainer.classList.add("hidden");
     }
@@ -1906,8 +2026,8 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     const uploadSummary = stripHTML(toolSession.stageSummaries?.upload || "");
     if (uploadSummary) {
       recapCards.push(`
-        <div class="tool-stage-card w-full max-w-2xl mx-auto rounded-3xl border border-slate-200 bg-white/90 p-6">
-          <h3 class="font-display text-xl text-ink">Resume uploaded</h3>
+        <div class="tool-stage-card w-full max-w-4xl mx-auto p-6 dossier-card">
+          <p class="dossier-kicker">Resume uploaded</p>
           <p class="mt-2 text-slate-600">${escapeHTML(uploadSummary)}</p>
         </div>
       `);
@@ -1919,8 +2039,8 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
       const readability = analysis.readability_summary || analysis.ReadabilitySummary || "Analysis ready.";
       const wins = analysis.quick_wins || analysis.QuickWins || [];
       recapCards.push(`
-        <div class="tool-stage-card w-full max-w-2xl mx-auto rounded-3xl border border-slate-200 bg-white/90 p-6">
-          <h3 class="font-display text-xl text-ink">Resume analysis</h3>
+        <div class="tool-stage-card w-full max-w-4xl mx-auto p-6 dossier-ats">
+          <h3 class="font-display dossier-title text-ink">Resume analysis</h3>
           <div class="mt-4 grid gap-4 md:grid-cols-3">
             <div class="rounded-2xl border border-slate-200 bg-white p-4">
               <p class="text-xs uppercase tracking-wide text-slate-500">ATS score</p>
@@ -1946,10 +2066,22 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     if (toolSession.subfocus) selections.push(toolSession.subfocus);
     if (selections.length) {
       recapCards.push(`
-        <div class="tool-stage-card w-full max-w-2xl mx-auto rounded-3xl border border-slate-200 bg-white/90 p-6">
-          <h3 class="font-display text-xl text-ink">Your selections</h3>
+        <div class="tool-stage-card w-full max-w-4xl mx-auto p-6 dossier-card">
+          <p class="dossier-kicker">Your selections</p>
           <div class="mt-3 flex flex-wrap gap-2">
-            ${selections.map((item) => `<span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">${escapeHTML(item)}</span>`).join("")}
+            ${selections.map((item) => `<span class="tool-tag">${escapeHTML(item)}</span>`).join("")}
+          </div>
+        </div>
+      `);
+    }
+
+    if (activeStageKey === "chat" && toolSession.mentorResponse) {
+      recapCards.push(`
+        <div class="tool-stage-card w-full max-w-5xl mx-auto p-8 dossier-mentor">
+          <h3 class="font-display dossier-title text-ink text-center">Initial mentor response</h3>
+          <p class="mt-2 text-slate-600 text-center">Your first plan is ready. This doesn’t count as a follow-up.</p>
+          <div class="mt-6">
+            ${renderMentorResponse(toolSession.mentorResponse)}
           </div>
         </div>
       `);
@@ -1958,6 +2090,7 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     recapContainer.innerHTML = recapCards.join("");
     recapContainer.classList.toggle("hidden", recapCards.length === 0);
     if (recapCards.length > 0) {
+      refreshLucide();
       animateIn(recapContainer.children);
     }
   };
@@ -1996,12 +2129,13 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     if (toolSession.mentorResponse) {
       const mentor = document.getElementById("mentor-response");
       if (mentor) mentor.innerHTML = renderMentorResponse(toolSession.mentorResponse);
+      refreshLucide();
     }
 
     const completedKeys = new Set(toolSession.usage?.completed_stages || []);
     let activeKey = stages.find((key) => !completedKeys.has(key)) || "chat";
-    if (toolSession.mentorResponse && completedKeys.has("mentor_response")) {
-      activeKey = toolSession.chatHistory?.length ? "chat" : "mentor_response";
+    if (toolSession.mentorResponse) {
+      activeKey = "chat";
     }
     revealStage(activeKey);
   };
@@ -2066,16 +2200,26 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
   const focusOptions = document.getElementById("focus-options");
   const focusContinue = document.getElementById("focus-continue");
   if (focusOptions) {
-    focusOptions.innerHTML = careerCopilotFocuses.map((focus) => `
-      <button class="focus-card rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-skyline/70" data-value="${focus}">
-        <div class="font-semibold text-ink">${focus}</div>
-        <div class="text-sm text-slate-500">Tailor the plan to this goal.</div>
-      </button>
-    `).join("");
+    focusOptions.innerHTML = careerCopilotFocuses.map((focus) => {
+      const icon = careerCopilotFocusIcons[focus] || "star";
+      const tone = careerCopilotFocusTones[focus] || "is-slate";
+      const isSelected = toolSession.focus === focus;
+      const description = careerCopilotFocusDescriptions[focus] || "Tailor the plan to this goal.";
+      return `
+        <button class="tool-option-card focus-card ${isSelected ? "is-selected" : ""}" data-value="${focus}">
+          <span class="tool-option-icon ${tone}"><i data-lucide="${icon}"></i></span>
+          <div class="flex-1">
+            <div class="font-semibold text-ink">${focus}</div>
+            <div class="text-sm text-slate-500">${description}</div>
+          </div>
+          <span class="tool-option-radio" aria-hidden="true"></span>
+        </button>
+      `;
+    }).join("");
     focusOptions.querySelectorAll(".focus-card").forEach((btn) => {
       btn.addEventListener("click", () => {
-        focusOptions.querySelectorAll(".focus-card").forEach((el) => el.classList.remove("border-skyline", "bg-skyline/5"));
-        btn.classList.add("border-skyline", "bg-skyline/5");
+        focusOptions.querySelectorAll(".focus-card").forEach((el) => el.classList.remove("is-selected"));
+        btn.classList.add("is-selected");
         toolSession.focus = btn.dataset.value;
         persistToolState(toolSession);
         if (focusContinue) focusContinue.disabled = false;
@@ -2084,11 +2228,11 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     if (toolSession.focus) {
       focusOptions.querySelectorAll(".focus-card").forEach((el) => {
         const isMatch = el.dataset.value === toolSession.focus;
-        el.classList.toggle("border-skyline", isMatch);
-        el.classList.toggle("bg-skyline/5", isMatch);
+        el.classList.toggle("is-selected", isMatch);
       });
       if (focusContinue) focusContinue.disabled = false;
     }
+    refreshLucide();
   }
   if (focusContinue) {
     focusContinue.addEventListener("click", async () => {
@@ -2105,15 +2249,19 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     if (!subfocusOptions) return;
     const items = careerCopilotSubfocuses[session.focus] || [];
     subfocusOptions.innerHTML = items.map((subfocus) => `
-      <button class="subfocus-card rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-skyline/70" data-value="${subfocus}">
-        <div class="font-semibold text-ink">${subfocus}</div>
-        <div class="text-sm text-slate-500">Add clarity to the plan.</div>
+      <button class="tool-option-card subfocus-card" data-value="${subfocus}">
+        <span class="tool-option-icon ${careerCopilotSubfocusTone}"><i data-lucide="${careerCopilotSubfocusIcon}"></i></span>
+        <div class="flex-1">
+          <div class="font-semibold text-ink">${subfocus}</div>
+          <div class="text-sm text-slate-500">Add clarity to the plan.</div>
+        </div>
+        <span class="tool-option-radio" aria-hidden="true"></span>
       </button>
     `).join("");
     subfocusOptions.querySelectorAll(".subfocus-card").forEach((btn) => {
       btn.addEventListener("click", () => {
-        subfocusOptions.querySelectorAll(".subfocus-card").forEach((el) => el.classList.remove("border-skyline", "bg-skyline/5"));
-        btn.classList.add("border-skyline", "bg-skyline/5");
+        subfocusOptions.querySelectorAll(".subfocus-card").forEach((el) => el.classList.remove("is-selected"));
+        btn.classList.add("is-selected");
         session.subfocus = btn.dataset.value;
         persistToolState(session);
         if (subfocusContinue) subfocusContinue.disabled = false;
@@ -2122,11 +2270,11 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     if (session.subfocus) {
       subfocusOptions.querySelectorAll(".subfocus-card").forEach((el) => {
         const isMatch = el.dataset.value === session.subfocus;
-        el.classList.toggle("border-skyline", isMatch);
-        el.classList.toggle("bg-skyline/5", isMatch);
+        el.classList.toggle("is-selected", isMatch);
       });
       if (subfocusContinue) subfocusContinue.disabled = false;
     }
+    refreshLucide();
   };
 
   const subfocusContinue = document.getElementById("subfocus-continue");
@@ -2135,7 +2283,14 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
       if (!toolSession.subfocus) return;
       await completeStage("subfocus", `Subfocus: <strong>${toolSession.subfocus}</strong>.`);
       revealStage("questions");
-      initQuestionFlow(toolSession, { completeStage, revealStage });
+      initQuestionFlow(toolSession, {
+        completeStage,
+        revealStage,
+        renderRecap,
+        onMentorComplete: async () => {
+          await sendToolAction(slug, { action: "flow_complete" });
+        }
+      });
     });
   }
 
@@ -2149,6 +2304,7 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
       await completeStage("mentor_response", "Initial plan generated.");
       await sendToolAction(slug, { action: "flow_complete" });
       revealStage("chat");
+      refreshLucide();
     });
   }
 
@@ -2193,15 +2349,21 @@ const initQuestionFlow = (session, helpers) => {
 
   const renderQuestion = () => {
     const current = session.questions[session.questionIndex];
+    const safeLabel = escapeHTML(current.label);
     questionBody.innerHTML = `
-      <h3 class="font-display text-xl text-ink">${current.label}</h3>
+      <h3 class="font-display text-xl text-ink">${safeLabel}</h3>
       <div class="mt-4" id="question-input"></div>
     `;
     const inputHost = questionBody.querySelector("#question-input");
     if (!inputHost) return;
 
     if (current.type === "text") {
-      inputHost.innerHTML = `<input class="w-full rounded-2xl border border-slate-200 px-4 py-3" />`;
+      inputHost.innerHTML = `
+        <label class="tool-input-shell">
+          <input class="tool-input-field" aria-label="${safeLabel}" />
+          <span class="tool-input-icon"><i data-lucide="pencil"></i></span>
+        </label>
+      `;
       const input = inputHost.querySelector("input");
       input.value = session.answers[current.key] || "";
       input.addEventListener("input", () => {
@@ -2212,7 +2374,12 @@ const initQuestionFlow = (session, helpers) => {
     }
 
     if (current.type === "textarea") {
-      inputHost.innerHTML = `<textarea class="w-full min-h-[120px] rounded-2xl border border-slate-200 px-4 py-3"></textarea>`;
+      inputHost.innerHTML = `
+        <label class="tool-input-shell">
+          <textarea class="tool-input-field min-h-[120px] resize-none" aria-label="${safeLabel}"></textarea>
+          <span class="tool-input-icon"><i data-lucide="pencil"></i></span>
+        </label>
+      `;
       const input = inputHost.querySelector("textarea");
       input.value = session.answers[current.key] || "";
       input.addEventListener("input", () => {
@@ -2225,8 +2392,10 @@ const initQuestionFlow = (session, helpers) => {
     if (current.type === "single") {
       const selected = session.answers[current.key];
       inputHost.innerHTML = current.options.map((opt) => `
-        <button class="question-option w-full text-left rounded-2xl border border-slate-200 px-4 py-3 hover:border-skyline/70 ${selected === opt ? "border-skyline bg-skyline/5" : ""}" data-value="${opt}">
-          ${opt}
+        <button class="question-option tool-option-card ${selected === opt ? "is-selected" : ""}" data-value="${opt}">
+          <span class="tool-option-icon is-emerald"><i data-lucide="check-circle"></i></span>
+          <div class="flex-1 font-semibold text-ink">${opt}</div>
+          <span class="tool-option-radio" aria-hidden="true"></span>
         </button>
       `).join("");
       inputHost.querySelectorAll(".question-option").forEach((btn) => {
@@ -2242,8 +2411,10 @@ const initQuestionFlow = (session, helpers) => {
     if (current.type === "multi") {
       const selected = session.answers[current.key] || [];
       inputHost.innerHTML = current.options.map((opt) => `
-        <button class="question-option w-full text-left rounded-2xl border border-slate-200 px-4 py-3 hover:border-skyline/70 ${selected.includes(opt) ? "border-skyline bg-skyline/5" : ""}" data-value="${opt}">
-          ${opt}
+        <button class="question-option tool-option-card ${selected.includes(opt) ? "is-selected" : ""}" data-value="${opt}">
+          <span class="tool-option-icon is-emerald"><i data-lucide="check-circle"></i></span>
+          <div class="flex-1 font-semibold text-ink">${opt}</div>
+          <span class="tool-option-radio" aria-hidden="true"></span>
         </button>
       `).join("");
       inputHost.querySelectorAll(".question-option").forEach((btn) => {
@@ -2283,6 +2454,10 @@ const initQuestionFlow = (session, helpers) => {
     }
 
     updateControls();
+    refreshLucide();
+    if (window.motion && !prefersReducedMotion) {
+      window.motion.animate(questionBody, { opacity: [0, 1], transform: ["translateY(12px)", "translateY(0px)"] }, { duration: 0.35, easing: "ease-out" });
+    }
   };
 
   backBtn.addEventListener("click", () => {
@@ -2315,15 +2490,22 @@ const initQuestionFlow = (session, helpers) => {
 
     session.mentorResponse = mentorData;
     persistToolState(session);
-    renderRecap();
+    if (helpers?.renderRecap) {
+      helpers.renderRecap();
+    }
+    if (helpers?.completeStage) {
+      helpers.completeStage("questions", "Context captured for your plan.").catch(() => {});
+      helpers.completeStage("mentor_response", "Initial plan generated.").catch(() => {});
+    }
     if (helpers?.revealStage) {
-      helpers.revealStage("mentor_response");
+      helpers.revealStage("chat");
     }
     const mentor = document.getElementById("mentor-response");
     if (mentor) mentor.innerHTML = renderMentorResponse(mentorData);
+    refreshLucide();
     if (questionsLoader) questionsLoader.classList.add("hidden");
-    if (helpers?.completeStage) {
-      helpers.completeStage("questions", "Context captured for your plan.").catch(() => {});
+    if (helpers?.onMentorComplete) {
+      helpers.onMentorComplete().catch(() => {});
     }
   });
 
@@ -2339,7 +2521,8 @@ const initChatFlow = (session, freeRules) => {
   const chatMicCancel = document.getElementById("chat-mic-cancel");
   const micWaveform = document.getElementById("mic-waveform");
   const micStatus = document.getElementById("mic-status");
-  if (!chatLog || !chatInput || !chatSend || !chatMic || !chatMicConfirm || !chatMicCancel || !micWaveform || !micStatus) return;
+  const micTranscribing = document.getElementById("mic-transcribing");
+  if (!chatLog || !chatInput || !chatSend || !chatMic || !chatMicConfirm || !chatMicCancel || !micWaveform || !micStatus || !micTranscribing) return;
 
   updateChatLimits(session, freeRules);
 
@@ -2463,19 +2646,23 @@ const initChatFlow = (session, freeRules) => {
   const startWaveform = () => {
     micWaveform.classList.remove("hidden");
     const bars = micWaveform.querySelectorAll("span");
+    if (!bars.length) return;
+    const smoothing = new Array(bars.length).fill(8);
     const tick = () => {
       if (!analyser || !dataArray) return;
       analyser.getByteTimeDomainData(dataArray);
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i += 1) {
-        const delta = dataArray[i] - 128;
-        sum += Math.abs(delta);
-      }
-      const avg = sum / dataArray.length;
-      const level = Math.min(Math.max(avg / 2, 6), 28);
+      const step = Math.max(Math.floor(dataArray.length / bars.length), 1);
       bars.forEach((bar, index) => {
-        const variance = (index % 2 === 0 ? 0.7 : 1.1);
-        bar.style.height = `${Math.min(level * variance, 32)}px`;
+        const start = index * step;
+        const end = Math.min(start + step, dataArray.length);
+        let sum = 0;
+        for (let i = start; i < end; i += 1) {
+          sum += Math.abs(dataArray[i] - 128);
+        }
+        const avg = sum / Math.max(end - start, 1);
+        const target = Math.min(Math.max(avg * 1.1, 6), 34);
+        smoothing[index] = smoothing[index] * 0.6 + target * 0.4;
+        bar.style.height = `${smoothing[index]}px`;
       });
       rafId = window.requestAnimationFrame(tick);
     };
@@ -2487,7 +2674,18 @@ const initChatFlow = (session, freeRules) => {
       window.cancelAnimationFrame(rafId);
       rafId = null;
     }
+    micWaveform.querySelectorAll("span").forEach((bar) => {
+      bar.style.height = "8px";
+    });
     micWaveform.classList.add("hidden");
+  };
+
+  const showTranscribing = () => {
+    micTranscribing.classList.remove("hidden");
+  };
+
+  const hideTranscribing = () => {
+    micTranscribing.classList.add("hidden");
   };
 
   const resetMicControls = () => {
@@ -2567,16 +2765,19 @@ const initChatFlow = (session, freeRules) => {
       stopStream();
       stopAudioContext();
       if (micCanceled) {
+        hideTranscribing();
         micStatus.classList.add("hidden");
         micStatus.textContent = "Listening…";
         resetMicControls();
         return;
       }
 
-      micStatus.textContent = "Transcribing…";
+      resetMicControls();
+      micStatus.classList.add("hidden");
+      showTranscribing();
       const blob = new Blob(audioChunks, { type: micRecorder.mimeType || "audio/webm" });
       const transcript = await transcribeToolAudio(session, blob);
-      micStatus.classList.add("hidden");
+      hideTranscribing();
       micStatus.textContent = "Listening…";
       if (transcript) {
         chatInput.value = transcript;
@@ -2595,6 +2796,8 @@ const initChatFlow = (session, freeRules) => {
     source.connect(analyser);
 
     micRecorder.start();
+    hideTranscribing();
+    micStatus.textContent = "Listening…";
     micStatus.classList.remove("hidden");
     startWaveform();
     micTimeout = setTimeout(stopRecorder, 10000);
@@ -2699,12 +2902,15 @@ const applyResumeAnalysis = (analysis) => {
   const scoreEl = document.getElementById("ats-score");
   const readabilityEl = document.getElementById("ats-readability");
   const winsEl = document.getElementById("ats-wins");
-  if (scoreEl) scoreEl.textContent = analysis.ats_score ?? analysis.ATSScore ?? 0;
+  const scoreValue = analysis.ats_score ?? analysis.ATSScore ?? 0;
+  if (scoreEl) scoreEl.textContent = scoreValue;
   if (readabilityEl) readabilityEl.textContent = analysis.readability_summary || analysis.ReadabilitySummary || "Analysis ready.";
   if (winsEl) {
     const wins = analysis.quick_wins || analysis.QuickWins || [];
     winsEl.innerHTML = wins.map((item) => `<li>${item}</li>`).join("") || "<li>Review your top accomplishments for impact.</li>";
   }
+  renderATSScoreRing(scoreValue);
+  refreshLucide();
 };
 
 const showToolPaywall = (title, message) => {
@@ -3744,7 +3950,7 @@ const sendEvents = async (events) => {
 };
 
 const animateIn = (elements) => {
-  if (!window.motion) return;
+  if (!window.motion || prefersReducedMotion) return;
   [...elements].forEach((el, index) => {
     window.motion.animate(el, { opacity: [0, 1], transform: ["translateY(12px)", "translateY(0)"] }, { duration: 0.4, delay: index * 0.05 });
   });

@@ -53,6 +53,14 @@ IMAGE="${IMAGE_REPO}/${APP_NAME}:${TAG}"
 echo "==> Configure gcloud project"
 gcloud config set project "${PROJECT_ID}" >/dev/null
 
+echo "==> Ensure Artifact Registry repo (${ARTIFACT_REPO})"
+if ! gcloud artifacts repositories describe "${ARTIFACT_REPO}" --location "${REGION}" >/dev/null 2>&1; then
+  gcloud artifacts repositories create "${ARTIFACT_REPO}" \
+    --repository-format=docker \
+    --location "${REGION}" \
+    --description="Docker images for ${PROJECT_ID} apps"
+fi
+
 echo "==> Ensure static IP (${STATIC_IP_NAME})"
 if ! gcloud compute addresses describe "${STATIC_IP_NAME}" --global >/dev/null 2>&1; then
   gcloud compute addresses create "${STATIC_IP_NAME}" --global >/dev/null
@@ -74,12 +82,19 @@ if [[ "${MANAGE_DNS}" == "true" ]]; then
     --name "${FQDN}." \
     --type A \
     --format=json | python3 - <<'PY'
-import json, sys
+import json
+import sys
 
-data = json.load(sys.stdin)
+raw = sys.stdin.read().strip()
+if not raw:
+    print("")
+    raise SystemExit(0)
+
+data = json.loads(raw)
 if not data:
     print("")
     raise SystemExit(0)
+
 record = data[0]
 ttl = record.get("ttl", 300)
 rrdatas = record.get("rrdatas", [])
@@ -110,13 +125,48 @@ PY
       gcloud dns record-sets transaction execute --zone "${DNS_ZONE}"
     fi
   else
-    gcloud dns record-sets transaction start --zone "${DNS_ZONE}"
-    gcloud dns record-sets transaction add "${STATIC_IP}" \
+    EXISTING_IPS="$(gcloud dns record-sets list \
+      --zone "${DNS_ZONE}" \
       --name "${FQDN}." \
-      --ttl 300 \
       --type A \
-      --zone "${DNS_ZONE}"
-    gcloud dns record-sets transaction execute --zone "${DNS_ZONE}"
+      --format="value(rrdatas)")"
+    if [[ -n "${EXISTING_IPS}" ]]; then
+      if [[ "${EXISTING_IPS}" == "${STATIC_IP}" ]]; then
+        echo "==> DNS already points to ${STATIC_IP}"
+      else
+        EXISTING_TTL="$(gcloud dns record-sets list \
+          --zone "${DNS_ZONE}" \
+          --name "${FQDN}." \
+          --type A \
+          --format="value(ttl)")"
+        if [[ -z "${EXISTING_TTL}" ]]; then
+          EXISTING_TTL="300"
+        fi
+        IFS=";" read -r -a IPS <<< "${EXISTING_IPS}"
+        gcloud dns record-sets transaction start --zone "${DNS_ZONE}"
+        for ip in "${IPS[@]}"; do
+          gcloud dns record-sets transaction remove "${ip}" \
+            --name "${FQDN}." \
+            --ttl "${EXISTING_TTL}" \
+            --type A \
+            --zone "${DNS_ZONE}"
+        done
+        gcloud dns record-sets transaction add "${STATIC_IP}" \
+          --name "${FQDN}." \
+          --ttl 300 \
+          --type A \
+          --zone "${DNS_ZONE}"
+        gcloud dns record-sets transaction execute --zone "${DNS_ZONE}"
+      fi
+    else
+      gcloud dns record-sets transaction start --zone "${DNS_ZONE}"
+      gcloud dns record-sets transaction add "${STATIC_IP}" \
+        --name "${FQDN}." \
+        --ttl 300 \
+        --type A \
+        --zone "${DNS_ZONE}"
+      gcloud dns record-sets transaction execute --zone "${DNS_ZONE}"
+    fi
   fi
 else
   echo "==> MANAGE_DNS=false. Create an A record in your DNS provider:"

@@ -268,13 +268,19 @@ func (c *GeminiClient) sendGenerateContent(ctx context.Context, payload geminiRe
 }
 
 type geminiResponse struct {
-	Candidates []struct {
-		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-		} `json:"content"`
-	} `json:"candidates"`
+	Candidates []geminiResponseCandidate `json:"candidates"`
+}
+
+type geminiResponseCandidate struct {
+	Content geminiResponseContent `json:"content"`
+}
+
+type geminiResponseContent struct {
+	Parts []geminiResponsePart `json:"parts"`
+}
+
+type geminiResponsePart struct {
+	Text string `json:"text"`
 }
 
 func parseGeminiResume(raw []byte) (GeminiResumeOutput, error) {
@@ -370,15 +376,19 @@ func parseGeminiText(raw []byte) (string, error) {
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return "", err
 	}
-	if len(response.Candidates) == 0 || len(response.Candidates[0].Content.Parts) == 0 {
+	if len(response.Candidates) == 0 {
 		return "", errors.New("gemini response empty")
 	}
-	text := strings.TrimSpace(response.Candidates[0].Content.Parts[0].Text)
+	text := extractGeminiText(response)
 	text = trimJSONFence(text)
 	if text == "" {
 		return "", errors.New("gemini text empty")
 	}
-	return text, nil
+	normalized, ok := extractJSONPayload(text)
+	if !ok {
+		return "", errors.New("gemini text empty")
+	}
+	return normalized, nil
 }
 
 func trimJSONFence(value string) string {
@@ -387,6 +397,61 @@ func trimJSONFence(value string) string {
 	value = strings.TrimPrefix(value, "```")
 	value = strings.TrimSuffix(value, "```")
 	return strings.TrimSpace(value)
+}
+
+func extractJSONPayload(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", false
+	}
+	start := strings.Index(trimmed, "{")
+	if start == -1 {
+		return "", false
+	}
+	decoder := json.NewDecoder(strings.NewReader(trimmed[start:]))
+	decoder.UseNumber()
+	var raw json.RawMessage
+	if err := decoder.Decode(&raw); err != nil {
+		return "", false
+	}
+	if len(raw) == 0 {
+		return "", false
+	}
+	return string(raw), true
+}
+
+func extractGeminiText(response geminiResponse) string {
+	return extractGeminiTextFromCandidates(response.Candidates)
+}
+
+func extractGeminiTextFromCandidates(candidates []geminiResponseCandidate) string {
+	for _, candidate := range candidates {
+		candidateText := normalizedGeminiText(candidate.Content.Parts)
+		if candidateText != "" {
+			return candidateText
+		}
+	}
+	return ""
+}
+
+func normalizedGeminiText(parts []geminiResponsePart) string {
+	text := joinGeminiParts(parts)
+	return strings.TrimSpace(text)
+}
+
+func joinGeminiParts(parts []geminiResponsePart) string {
+	var builder strings.Builder
+	for _, part := range parts {
+		value := strings.TrimSpace(part.Text)
+		if value == "" {
+			continue
+		}
+		if builder.Len() > 0 {
+			builder.WriteString("\n")
+		}
+		builder.WriteString(value)
+	}
+	return builder.String()
 }
 
 func readResponseBody(reader io.Reader) ([]byte, error) {

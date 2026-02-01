@@ -8,6 +8,7 @@ HTTP handlers for public, authenticated, and admin APIs plus server-rendered pag
 
 - `auth.go`: Google ID token exchange → JWT.
 - `config.go`: client config (site + auth + Razorpay key id).
+- `health.go`: liveness endpoint (`/healthz`).
 - `me.go`: `/api/me` profile + stage + entitlement.
 - `posts.go`: public post listing + detail (gated by access level).
 - `courses.go`: course listing + detail (gated by access level).

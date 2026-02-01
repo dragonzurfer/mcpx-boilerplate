@@ -11,7 +11,7 @@ Explore is a self-hosted newsletter + courses platform with manual Razorpay rene
 - `stores/`: GORM models and persistence helpers.
 - `payments/`: plan configuration and pricing helpers.
 - `middleware/`: auth, admin guard, rate limiting.
-- `web/`: HTML templates and static assets (Tailwind CDN + vanilla JS).
+- `web/`: HTML templates and static assets (Tailwind CDN + vanilla JS), including the Career Copilot dossier-style tool UI.
 - `docs/`: architecture and setup documentation.
 - `k8s/`, `scripts/`, `infra/`: deployment helpers and infra tooling.
 

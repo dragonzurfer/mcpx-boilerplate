@@ -18,10 +18,10 @@ export PROJECT_ID="your-gcp-project-id"
 export REGION="us-central1"
 export CLUSTER_NAME="mcpx-gke"
 export DOMAIN="mcpx.in"
-export SUBDOMAIN="script"       # subdomain for this app
-export APP_NAME="ytscript"       # Kubernetes app name
-export NAMESPACE="ytscript"      # Namespace (defaults to APP_NAME)
-export MANAGE_DNS="true"         # set "false" to keep GoDaddy DNS
+export SUBDOMAIN="explore"      
+export APP_NAME="explore"       
+export NAMESPACE="explore"      
+export MANAGE_DNS="true"        
 export USE_GKE_GCLOUD_AUTH_PLUGIN=True
 
 ./scripts/deploy_gke.sh
@@ -53,8 +53,8 @@ Use this after the ingress + namespace exist and your `.env` has not changed.
 export PROJECT_ID="your-gcp-project-id"
 export REGION="us-central1"
 export CLUSTER_NAME="mcpx-gke"
-export APP_NAME="ytscript"
-export NAMESPACE="ytscript"
+export APP_NAME="explore"
+export NAMESPACE="explore"
 export ARTIFACT_REPO="mcpx-apps"
 
 ./scripts/deploy_gke_code.sh

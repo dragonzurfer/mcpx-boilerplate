@@ -319,7 +319,7 @@ func (h *ToolsHandler) chat(c *gin.Context) {
 		Message:    strings.TrimSpace(req.Message),
 	})
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "chat response failed"})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "chat response failed" + err.Error()})
 		return
 	}
 

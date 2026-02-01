@@ -76,6 +76,7 @@ func main() {
 	pageHandler.Register(r)
 
 	routes.RegisterConfig(r, store)
+	routes.RegisterHealth(r)
 
 	r.Static("/assets", "./web/assets")
 	r.GET("/privacy", func(c *gin.Context) { c.File("./web/privacy.html") })
