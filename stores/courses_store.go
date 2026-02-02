@@ -16,10 +16,16 @@ func (s *Store) GetCourseBySlug(input CourseLookupInput) (*CourseModel, error) {
 	if slug == "" {
 		return nil, gorm.ErrRecordNotFound
 	}
+	key := courseLookupKey(slug)
+	if cached, ok := s.getCachedCourseLookup(key); ok {
+		return cached, nil
+	}
+
 	course := CourseModel{}
 	if err := s.db.Where("slug = ?", slug).First(&course).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, &course)
 	return &course, nil
 }
 
@@ -37,6 +43,11 @@ type CourseListOutput struct {
 }
 
 func (s *Store) ListCourses(input CourseListInput) (CourseListOutput, error) {
+	key := courseListKey(input)
+	if cached, ok := s.getCachedCourseList(key); ok {
+		return cached, nil
+	}
+
 	query := s.db.Model(&CourseModel{})
 	if len(input.AccessLevels) > 0 {
 		query = query.Where("access_level IN ?", input.AccessLevels)
@@ -61,7 +72,9 @@ func (s *Store) ListCourses(input CourseListInput) (CourseListOutput, error) {
 		return CourseListOutput{}, err
 	}
 
-	return CourseListOutput{Courses: courses, Total: total}, nil
+	output := CourseListOutput{Courses: courses, Total: total}
+	s.cacheSet(key, output)
+	return output, nil
 }
 
 type CourseCreateInput struct {

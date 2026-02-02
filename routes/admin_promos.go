@@ -50,8 +50,8 @@ func (h *AdminPromosHandler) Register(rg *gin.RouterGroup) {
 }
 
 func (h *AdminPromosHandler) list(c *gin.Context) {
-	rows := []stores.PromoModel{}
-	if err := h.Store.DB().Find(&rows).Error; err != nil {
+	rows, err := h.Store.ListPromos()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load promos"})
 		return
 	}
@@ -66,20 +66,13 @@ func (h *AdminPromosHandler) get(c *gin.Context) {
 		return
 	}
 
-	var promo stores.PromoModel
-	err = h.Store.DB().First(&promo, id64).Error
+	promo, variants, err := h.Store.GetPromoWithVariants(uint(id64))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "promo not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load promo"})
-		return
-	}
-
-	var variants []stores.PromoVariantModel
-	if err := h.Store.DB().Where("promo_id = ?", promo.ID).Find(&variants).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load promo variants"})
 		return
 	}
 

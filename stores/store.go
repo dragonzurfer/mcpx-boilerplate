@@ -8,7 +8,8 @@ import (
 )
 
 type Store struct {
-	db *gorm.DB
+	db    *gorm.DB
+	cache *Cache
 }
 
 func NewStore(dsn string) (*Store, error) {
@@ -53,7 +54,9 @@ func NewStore(dsn string) (*Store, error) {
 		return nil, err
 	}
 
-	return &Store{db: db}, nil
+	store := &Store{db: db}
+	store.EnableCache(CacheConfigFromEnv())
+	return store, nil
 }
 
 func (s *Store) DB() *gorm.DB {
@@ -62,7 +65,9 @@ func (s *Store) DB() *gorm.DB {
 
 // NewStoreWithDB builds a Store from an existing gorm DB handle (used in tests).
 func NewStoreWithDB(db *gorm.DB) *Store {
-	return &Store{db: db}
+	store := &Store{db: db}
+	store.EnableCache(CacheConfigFromEnv())
+	return store
 }
 
 func normalizeDSN(dsn string) string {

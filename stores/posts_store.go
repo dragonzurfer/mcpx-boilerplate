@@ -19,28 +19,18 @@ func (s *Store) GetPostBySlug(input PostLookupInput) (*PostModel, []TagModel, er
 		return nil, nil, gorm.ErrRecordNotFound
 	}
 
-	post := PostModel{}
-	if err := s.db.Where("slug = ?", slug).First(&post).Error; err != nil {
+	key := postLookupKeyBySlug(slug, input.IncludeTags)
+	if post, tags, ok := s.getCachedPostLookup(key); ok {
+		return post, tags, nil
+	}
+
+	post, tags, err := s.fetchPostBySlug(PostLookupInput{Slug: slug, IncludeTags: input.IncludeTags})
+	if err != nil {
 		return nil, nil, err
 	}
 
-	tags := []TagModel{}
-	if !input.IncludeTags {
-		return &post, tags, nil
-	}
-
-	tagIDs, err := s.tagIDsForPost(post.ID)
-	if err != nil {
-		return &post, tags, err
-	}
-	if len(tagIDs) == 0 {
-		return &post, tags, nil
-	}
-
-	if err := s.db.Where("id IN ?", tagIDs).Find(&tags).Error; err != nil {
-		return &post, tags, err
-	}
-	return &post, tags, nil
+	s.cacheSet(key, postLookupCacheValue{Post: post, Tags: tags})
+	return post, tags, nil
 }
 
 type PostIDLookupInput struct {
@@ -53,28 +43,18 @@ func (s *Store) GetPostByID(input PostIDLookupInput) (*PostModel, []TagModel, er
 		return nil, nil, gorm.ErrRecordNotFound
 	}
 
-	post := PostModel{}
-	if err := s.db.Where("id = ?", input.PostID).First(&post).Error; err != nil {
+	key := postLookupKeyByID(input.PostID, input.IncludeTags)
+	if post, tags, ok := s.getCachedPostLookup(key); ok {
+		return post, tags, nil
+	}
+
+	post, tags, err := s.fetchPostByID(input)
+	if err != nil {
 		return nil, nil, err
 	}
 
-	tags := []TagModel{}
-	if !input.IncludeTags {
-		return &post, tags, nil
-	}
-
-	tagIDs, err := s.tagIDsForPost(post.ID)
-	if err != nil {
-		return &post, tags, err
-	}
-	if len(tagIDs) == 0 {
-		return &post, tags, nil
-	}
-
-	if err := s.db.Where("id IN ?", tagIDs).Find(&tags).Error; err != nil {
-		return &post, tags, err
-	}
-	return &post, tags, nil
+	s.cacheSet(key, postLookupCacheValue{Post: post, Tags: tags})
+	return post, tags, nil
 }
 
 type PostListInput struct {
@@ -92,6 +72,76 @@ type PostListOutput struct {
 }
 
 func (s *Store) ListPosts(input PostListInput) (PostListOutput, error) {
+	key := postListKey(input)
+	if cached, ok := s.getCachedPostList(key); ok {
+		return cached, nil
+	}
+
+	output, err := s.fetchPostList(input)
+	if err != nil {
+		return PostListOutput{}, err
+	}
+
+	s.cacheSet(key, output)
+	return output, nil
+}
+
+func (s *Store) fetchPostBySlug(input PostLookupInput) (*PostModel, []TagModel, error) {
+	slug := strings.TrimSpace(input.Slug)
+	if slug == "" {
+		return nil, nil, gorm.ErrRecordNotFound
+	}
+
+	post := PostModel{}
+	if err := s.db.Where("slug = ?", slug).First(&post).Error; err != nil {
+		return nil, nil, err
+	}
+
+	tags, err := s.fetchPostTags(post.ID, input.IncludeTags)
+	if err != nil {
+		return &post, tags, err
+	}
+	return &post, tags, nil
+}
+
+func (s *Store) fetchPostByID(input PostIDLookupInput) (*PostModel, []TagModel, error) {
+	if input.PostID == 0 {
+		return nil, nil, gorm.ErrRecordNotFound
+	}
+
+	post := PostModel{}
+	if err := s.db.Where("id = ?", input.PostID).First(&post).Error; err != nil {
+		return nil, nil, err
+	}
+
+	tags, err := s.fetchPostTags(post.ID, input.IncludeTags)
+	if err != nil {
+		return &post, tags, err
+	}
+	return &post, tags, nil
+}
+
+func (s *Store) fetchPostTags(postID uint, includeTags bool) ([]TagModel, error) {
+	tags := []TagModel{}
+	if !includeTags {
+		return tags, nil
+	}
+
+	tagIDs, err := s.tagIDsForPost(postID)
+	if err != nil {
+		return tags, err
+	}
+	if len(tagIDs) == 0 {
+		return tags, nil
+	}
+
+	if err := s.db.Where("id IN ?", tagIDs).Find(&tags).Error; err != nil {
+		return tags, err
+	}
+	return tags, nil
+}
+
+func (s *Store) fetchPostList(input PostListInput) (PostListOutput, error) {
 	query := s.db.Model(&PostModel{})
 	if len(input.AccessLevels) > 0 {
 		query = query.Where("access_level IN ?", input.AccessLevels)

@@ -48,11 +48,16 @@ func (s *Store) GetUserByID(userID uint) (*UserModel, error) {
 	if userID == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
+	key := userByIDKey(userID)
+	if cached, ok := s.getCachedUserByID(key); ok {
+		return cached, nil
+	}
 
 	user := UserModel{}
 	if err := s.db.Where("id = ?", userID).First(&user).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, &user)
 	return &user, nil
 }
 

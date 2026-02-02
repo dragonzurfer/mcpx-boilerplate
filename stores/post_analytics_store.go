@@ -262,6 +262,10 @@ func (s *Store) GetPostAnalyticsSummary(input PostAnalyticsSummaryInput) (PostAn
 	if input.PostID == 0 {
 		return PostAnalyticsSummary{}, gorm.ErrRecordNotFound
 	}
+	key := postAnalyticsSummaryKey(input)
+	if cached, ok := s.getCachedPostAnalyticsSummary(key); ok {
+		return cached, nil
+	}
 
 	row := PostAnalyticsSummary{}
 	err := s.db.Model(&PostDailyMetricModel{}).
@@ -282,6 +286,7 @@ func (s *Store) GetPostAnalyticsSummary(input PostAnalyticsSummaryInput) (PostAn
 	if err != nil {
 		return PostAnalyticsSummary{}, err
 	}
+	s.cacheSet(key, row)
 	return row, nil
 }
 
@@ -295,6 +300,10 @@ func (s *Store) ListPostAnalyticsDays(input PostAnalyticsDaysInput) ([]PostDaily
 	if input.PostID == 0 {
 		return []PostDailyMetricModel{}, gorm.ErrRecordNotFound
 	}
+	key := postAnalyticsDaysKey(input)
+	if cached, ok := s.getCachedPostAnalyticsDays(key); ok {
+		return cached, nil
+	}
 	rows := []PostDailyMetricModel{}
 	err := s.db.Where("post_id = ? AND day_date >= ? AND day_date <= ?", input.PostID, input.From, input.To).
 		Order("day_date asc").
@@ -302,6 +311,7 @@ func (s *Store) ListPostAnalyticsDays(input PostAnalyticsDaysInput) ([]PostDaily
 	if err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, rows)
 	return rows, nil
 }
 
@@ -323,6 +333,10 @@ func (s *Store) ListPostPromoAnalytics(input PostPromoAnalyticsInput) ([]PostPro
 	if input.PostID == 0 {
 		return []PostPromoAnalyticsRow{}, gorm.ErrRecordNotFound
 	}
+	key := postPromoAnalyticsKey(input)
+	if cached, ok := s.getCachedPostPromoAnalytics(key); ok {
+		return cached, nil
+	}
 	rows := []PostPromoAnalyticsRow{}
 	err := s.db.Model(&PostPromoDailyMetricModel{}).
 		Select("post_id, promo_id, variant_id, SUM(impressions) as impressions, SUM(clicks) as clicks").
@@ -332,6 +346,7 @@ func (s *Store) ListPostPromoAnalytics(input PostPromoAnalyticsInput) ([]PostPro
 	if err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, rows)
 	return rows, nil
 }
 

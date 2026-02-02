@@ -290,13 +290,12 @@ func (h *PageHandler) adminPostAnalytics(c *gin.Context) {
 		return
 	}
 
-	post := stores.PostModel{}
-	_ = h.Store.DB().First(&post, postID).Error
-	if post.ID != 0 && post.Title != "" {
+	post, _, err := h.Store.GetPostByID(stores.PostIDLookupInput{PostID: uint(postID), IncludeTags: false})
+	if err == nil && post != nil && post.Title != "" {
 		meta.Title = post.Title + " · Analytics | " + meta.SiteName
 	}
 
-	data := pageData{Meta: meta, JSONLD: template.JS(meta.JSONLD), Theme: resolveTheme(settings), Post: &post}
+	data := pageData{Meta: meta, JSONLD: template.JS(meta.JSONLD), Theme: resolveTheme(settings), Post: post}
 	h.renderTemplate(c, "admin_post_analytics", data)
 }
 

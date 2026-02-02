@@ -14,6 +14,11 @@ type UserListOutput struct {
 }
 
 func (s *Store) ListUsers(input UserListInput) (UserListOutput, error) {
+	key := userListKey(input)
+	if cached, ok := s.getCachedUserList(key); ok {
+		return cached, nil
+	}
+
 	query := s.db.Model(&UserModel{})
 	if input.Query != "" {
 		like := "%" + strings.TrimSpace(input.Query) + "%"
@@ -31,7 +36,9 @@ func (s *Store) ListUsers(input UserListInput) (UserListOutput, error) {
 	if err := query.Order("created_at desc").Limit(pageSize).Offset(offset).Find(&users).Error; err != nil {
 		return UserListOutput{}, err
 	}
-	return UserListOutput{Users: users, Total: total}, nil
+	output := UserListOutput{Users: users, Total: total}
+	s.cacheSet(key, output)
+	return output, nil
 }
 
 func (s *Store) ListUserIDs(page, pageSize int) ([]uint, error) {

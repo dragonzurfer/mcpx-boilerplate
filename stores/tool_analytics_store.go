@@ -121,6 +121,10 @@ func (s *Store) SummarizeToolMetrics(input ToolMetricsSummaryInput) (ToolMetrics
 	if input.ToolID == 0 {
 		return ToolMetricsSummary{}, gorm.ErrInvalidData
 	}
+	key := toolMetricsKey(input)
+	if cached, ok := s.getCachedToolMetrics(key); ok {
+		return cached, nil
+	}
 
 	rows := []toolMetricCountRow{}
 	if err := s.db.Model(&ToolDailyMetricModel{}).
@@ -131,7 +135,9 @@ func (s *Store) SummarizeToolMetrics(input ToolMetricsSummaryInput) (ToolMetrics
 		return ToolMetricsSummary{}, err
 	}
 
-	return buildToolMetricsSummary(rows), nil
+	summary := buildToolMetricsSummary(rows)
+	s.cacheSet(key, summary)
+	return summary, nil
 }
 
 type toolMetricKey struct {

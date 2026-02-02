@@ -16,9 +16,15 @@ type FunnelConfigUpdateInput struct {
 }
 
 func (s *Store) GetFunnelConfig() (*FunnelConfigModel, error) {
+	key := funnelConfigKey()
+	if cached, ok := s.getCachedFunnelConfig(key); ok {
+		return cached, nil
+	}
+
 	cfg := FunnelConfigModel{}
 	err := s.db.First(&cfg).Error
 	if err == nil {
+		s.cacheSet(key, &cfg)
 		return &cfg, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -35,6 +41,7 @@ func (s *Store) GetFunnelConfig() (*FunnelConfigModel, error) {
 	if err := s.db.Create(&cfg).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, &cfg)
 	return &cfg, nil
 }
 
@@ -59,11 +66,17 @@ func (s *Store) UpdateFunnelConfig(input FunnelConfigUpdateInput) (*FunnelConfig
 }
 
 func (s *Store) ListFunnelEventWeights() ([]FunnelEventWeightModel, error) {
+	key := funnelWeightsKey()
+	if cached, ok := s.getCachedFunnelWeights(key); ok {
+		return cached, nil
+	}
+
 	rows := []FunnelEventWeightModel{}
 	if err := s.db.Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	if len(rows) > 0 {
+		s.cacheSet(key, rows)
 		return rows, nil
 	}
 
@@ -71,6 +84,7 @@ func (s *Store) ListFunnelEventWeights() ([]FunnelEventWeightModel, error) {
 	if err := s.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&defaults).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, defaults)
 	return defaults, nil
 }
 
@@ -82,11 +96,17 @@ func (s *Store) UpsertFunnelEventWeight(weight FunnelEventWeightModel) error {
 }
 
 func (s *Store) ListFunnelStageThresholds() ([]FunnelStageThresholdModel, error) {
+	key := funnelStagesKey()
+	if cached, ok := s.getCachedFunnelStages(key); ok {
+		return cached, nil
+	}
+
 	rows := []FunnelStageThresholdModel{}
 	if err := s.db.Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	if len(rows) > 0 {
+		s.cacheSet(key, rows)
 		return rows, nil
 	}
 
@@ -94,6 +114,7 @@ func (s *Store) ListFunnelStageThresholds() ([]FunnelStageThresholdModel, error)
 	if err := s.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&defaults).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, defaults)
 	return defaults, nil
 }
 
@@ -116,9 +137,15 @@ func (s *Store) GetUserMetrics(userID uint) (*UserMetricsModel, error) {
 	if userID == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
+	key := userMetricsKey(userID)
+	if cached, ok := s.getCachedUserMetrics(key); ok {
+		return cached, nil
+	}
+
 	metrics := UserMetricsModel{}
 	if err := s.db.Where("user_id = ?", userID).First(&metrics).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, &metrics)
 	return &metrics, nil
 }

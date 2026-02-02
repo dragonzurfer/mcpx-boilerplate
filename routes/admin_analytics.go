@@ -18,8 +18,8 @@ func (h *AdminAnalyticsHandler) Register(rg *gin.RouterGroup) {
 }
 
 func (h *AdminAnalyticsHandler) funnel(c *gin.Context) {
-	rows := []stageCountRow{}
-	if err := h.Store.DB().Model(&stores.UserMetricsModel{}).Select("stage, count(*) as count").Group("stage").Scan(&rows).Error; err != nil {
+	rows, err := h.Store.ListStageCounts()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load funnel analytics"})
 		return
 	}
@@ -27,35 +27,20 @@ func (h *AdminAnalyticsHandler) funnel(c *gin.Context) {
 }
 
 func (h *AdminAnalyticsHandler) promos(c *gin.Context) {
-	impressions := []promoCountRow{}
-	if err := h.Store.DB().Model(&stores.PromoImpressionModel{}).Select("promo_id, count(*) as count").Group("promo_id").Scan(&impressions).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load promo analytics"})
-		return
-	}
-	clicks := []promoCountRow{}
-	if err := h.Store.DB().Model(&stores.PromoClickModel{}).Select("promo_id, count(*) as count").Group("promo_id").Scan(&clicks).Error; err != nil {
+	counts, err := h.Store.GetPromoAnalyticsCounts()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load promo analytics"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"impressions": impressions, "clicks": clicks})
+	c.JSON(http.StatusOK, gin.H{"impressions": counts.Impressions, "clicks": counts.Clicks})
 }
 
 func (h *AdminAnalyticsHandler) content(c *gin.Context) {
-	rows := []promoCountRow{}
-	if err := h.Store.DB().Model(&stores.EventModel{}).Select("entity_id as promo_id, count(*) as count").Where("event_type = ?", "post_open").Group("entity_id").Scan(&rows).Error; err != nil {
+	rows, err := h.Store.ListContentAnalyticsCounts()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load content analytics"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"posts": rows})
-}
-
-type stageCountRow struct {
-	Stage string `json:"stage"`
-	Count int    `json:"count"`
-}
-
-type promoCountRow struct {
-	PromoID uint `json:"promo_id"`
-	Count   int  `json:"count"`
 }

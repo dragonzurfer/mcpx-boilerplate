@@ -63,6 +63,11 @@ type ToolListInput struct {
 }
 
 func (s *Store) ListTools(input ToolListInput) ([]ToolModel, error) {
+	key := toolListKey(input)
+	if cached, ok := s.getCachedToolList(key); ok {
+		return cached, nil
+	}
+
 	rows := []ToolModel{}
 	query := s.db.Model(&ToolModel{})
 	if input.ActiveOnly {
@@ -71,6 +76,7 @@ func (s *Store) ListTools(input ToolListInput) ([]ToolModel, error) {
 	if err := query.Order("name asc").Find(&rows).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, rows)
 	return rows, nil
 }
 
@@ -79,10 +85,15 @@ func (s *Store) GetToolBySlug(slug string) (*ToolModel, error) {
 	if slug == "" {
 		return nil, gorm.ErrRecordNotFound
 	}
+	key := toolLookupKey(slug)
+	if cached, ok := s.getCachedToolLookup(key); ok {
+		return cached, nil
+	}
 	row := ToolModel{}
 	if err := s.db.Where("slug = ?", slug).First(&row).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, &row)
 	return &row, nil
 }
 

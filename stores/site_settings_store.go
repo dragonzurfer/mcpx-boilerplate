@@ -21,9 +21,15 @@ type SiteSettingsInput struct {
 }
 
 func (s *Store) GetSiteSettings() (*SiteSettingsModel, error) {
+	key := siteSettingsKey()
+	if cached, ok := s.getCachedSiteSettings(key); ok {
+		return cached, nil
+	}
+
 	settings := SiteSettingsModel{}
 	err := s.db.First(&settings).Error
 	if err == nil {
+		s.cacheSet(key, &settings)
 		return &settings, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -57,6 +63,7 @@ func (s *Store) EnsureSiteSettings(defaults SiteSettingsInput) (*SiteSettingsMod
 	if err := s.db.Create(settings).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(siteSettingsKey(), settings)
 	return settings, nil
 }
 
@@ -85,5 +92,6 @@ func (s *Store) UpdateSiteSettings(input SiteSettingsInput) (*SiteSettingsModel,
 	if err := s.db.Model(settings).Updates(updates).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(siteSettingsKey(), settings)
 	return settings, nil
 }

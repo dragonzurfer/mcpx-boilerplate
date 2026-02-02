@@ -39,9 +39,9 @@ func (s *Store) CreatePayment(input PaymentCreateInput) (*PaymentModel, error) {
 }
 
 type PaymentUpdateInput struct {
-	RazorpayOrderID  string
+	RazorpayOrderID   string
 	RazorpayPaymentID string
-	Status           string
+	Status            string
 }
 
 func (s *Store) UpdatePaymentStatus(input PaymentUpdateInput) (*PaymentModel, error) {
@@ -93,11 +93,21 @@ func (s *Store) GetActiveEntitlement(input EntitlementLookupInput) (*Entitlement
 	if input.UserID == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
+	key := activeEntitlementKey(input)
+	if cached, ok := s.getCachedActiveEntitlement(key); ok {
+		if cached != nil {
+			return cached, nil
+		}
+		return nil, gorm.ErrRecordNotFound
+	}
 
 	entitlement := EntitlementModel{}
 	if err := s.db.Where("user_id = ? AND status = ? AND end_at > ?", input.UserID, EntitlementStatusActive, input.Now).First(&entitlement).Error; err != nil {
+		s.cacheSet(key, entitlement)
 		return nil, err
 	}
+
+	s.cacheSet(key, &entitlement)
 	return &entitlement, nil
 }
 
@@ -105,19 +115,27 @@ func (s *Store) GetLatestEntitlement(userID uint) (*EntitlementModel, error) {
 	if userID == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
+	key := latestEntitlementKey(userID)
+	if cached, ok := s.getCachedLatestEntitlement(key); ok {
+		if cached != nil {
+			return cached, nil
+		}
+		return nil, gorm.ErrRecordNotFound
+	}
 
 	entitlement := EntitlementModel{}
 	if err := s.db.Where("user_id = ?", userID).Order("end_at desc").First(&entitlement).Error; err != nil {
 		return nil, err
 	}
+	s.cacheSet(key, &entitlement)
 	return &entitlement, nil
 }
 
 type EntitlementUpsertInput struct {
-	UserID       uint
-	PlanCode     string
-	StartAt      time.Time
-	EndAt        time.Time
+	UserID        uint
+	PlanCode      string
+	StartAt       time.Time
+	EndAt         time.Time
 	LastPaymentID uint
 }
 
@@ -135,12 +153,12 @@ func (s *Store) UpsertEntitlement(input EntitlementUpsertInput) (*EntitlementMod
 
 	if err == nil {
 		updates := map[string]interface{}{
-			"plan_code":      planCode,
-			"status":         EntitlementStatusActive,
-			"start_at":       input.StartAt,
-			"end_at":         input.EndAt,
+			"plan_code":       planCode,
+			"status":          EntitlementStatusActive,
+			"start_at":        input.StartAt,
+			"end_at":          input.EndAt,
 			"last_payment_id": input.LastPaymentID,
-			"updated_at":     time.Now().UTC(),
+			"updated_at":      time.Now().UTC(),
 		}
 		if err := s.db.Model(&existing).Updates(updates).Error; err != nil {
 			return nil, err

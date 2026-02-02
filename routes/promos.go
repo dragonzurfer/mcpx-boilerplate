@@ -47,8 +47,8 @@ func (h *PromosHandler) decide(c *gin.Context) {
 		return
 	}
 
-	post := stores.PostModel{}
-	if err := h.Store.DB().Where("id = ?", postID).First(&post).Error; err != nil {
+	post, _, err := h.Store.GetPostByID(stores.PostIDLookupInput{PostID: postID, IncludeTags: false})
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
 		return
 	}
