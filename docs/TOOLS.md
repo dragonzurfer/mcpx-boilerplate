@@ -66,10 +66,37 @@ Actions used by Career Copilot:
 
 1. Resume upload (blocks if `has_used_free_flow` and no entitlement).
 2. ATS + resume analysis (free, non-counted).
-3. Focus + subfocus selections.
+3. Focus + subfocus selections (focus stage now shows all focus->subfocus paths so users can preview or preselect a path before moving on).
 4. Context questions (one-by-one).
 5. Initial mentor response (free, non-counted). Resume text and answers are stored client-side for later prompts.
 6. Follow-up chat (2 free responses, 1 free voice input) with optional voice transcription.
+
+### Career Copilot guided paths
+
+- `Career Growth -> Promotion roadmap`
+- `Career Growth -> Leadership skills`
+- `Career Growth -> Salary negotiation`
+- `Career Growth -> Visibility strategy`
+- `Skill Development -> Tech stack depth`
+- `Skill Development -> Product instincts`
+- `Skill Development -> Data + analytics`
+- `Skill Development -> Design thinking`
+- `Career Switching -> Role transition`
+- `Career Switching -> Industry shift`
+- `Career Switching -> Remote relocation`
+- `Career Switching -> First-time manager`
+- `Resume Improvement -> ATS optimization`
+- `Resume Improvement -> Storytelling`
+- `Resume Improvement -> Portfolio alignment`
+- `Resume Improvement -> Project impact`
+- `Interview Preparation -> Behavioral interviews`
+- `Interview Preparation -> System design`
+- `Interview Preparation -> Case interviews`
+- `Interview Preparation -> Portfolio walkthrough`
+- `General Career Advice -> Clarity + direction`
+- `General Career Advice -> Work-life balance`
+- `General Career Advice -> Confidence boost`
+- `General Career Advice -> Networking strategy`
 
 Paywall appears on:
 

@@ -6,9 +6,11 @@ Server-rendered HTML templates for Explore, including shared partials and the Ca
 
 ## Files
 
-- `layout.html`: base layout, fonts, Tailwind config, Motion One script, and page-wide script loading.
-- `tool.html`: Career Copilot UI shell (hero, dossier progress header, completion chips, recap container, stage cards for upload/analysis/focus/subfocus/questions/mentor/chat). Analysis stage uses ATS score cards + score ring; focus stage adds a hero + inline status chips + selection panel; subfocus stage uses a centered header + two-column selection grid; chat stage uses a centered mentorship header with a card-style chat shell + composer (chat log expands with content), a live voice waveform, and a transcribing loader, stacked under the dossier recap in a single-column layout. The mentor response stage is kept for markup consistency but the flow jumps directly to chat once a plan is generated. IDs + `data-stage` attributes are required by `web/assets/app.js`.
-- `tools.html`: tools catalog listing.
+- `layout.html`: base layout, fonts, Tailwind browser runtime (`@tailwindcss/browser@4`) with `@import "tailwindcss"` + `@theme` tokens, Motion runtime (`motion@latest/dist/motion.js`), and page-wide script loading.
+- `tool.html`: Career Copilot UI shell (hero, dossier progress header, completion chips, recap container, stage cards for upload/analysis/focus/subfocus/questions/mentor/chat). Analysis stage uses ATS score cards + score ring; focus stage adds a hero + inline status chips + selection panel plus an "All guided paths" map that previews every focus->subfocus route; subfocus stage uses a centered header + two-column selection grid; chat stage uses a centered mentorship header with a card-style chat shell + composer (chat log expands with content), a live voice waveform, and a transcribing loader, stacked under the dossier recap in a single-column layout. The mentor response stage is kept for markup consistency but the flow jumps directly to chat once a plan is generated. IDs + `data-stage` attributes are required by `web/assets/app.js`.
+- `post.html`: post detail page shell with a centered reading column (`max-w-3xl mx-auto`) for headline, metadata, and markdown body.
+- `tools.html`: tools catalog listing with a dedicated loading state (`tools-loader`) and a hidden grid (`tools-grid`) revealed after data loads.
+- `pricing.html`: pricing page with a dedicated loading state (`pricing-loader`), a hidden plans grid (`pricing-cards`) revealed after plans load, and value-focused copy that explains monthly vs yearly use cases.
 - `admin_tools.html`: admin controls for tool gating + tracking.
 - `partials/`: shared navigation and admin nav fragments (see `web/templates/partials/docs.md`).
 

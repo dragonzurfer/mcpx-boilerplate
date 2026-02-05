@@ -5,10 +5,15 @@
   <main class="px-6 lg:px-16 pb-24">
     <section class="max-w-4xl">
       <h1 class="font-display text-4xl lg:text-6xl text-ink">Membership pricing</h1>
-      <p class="mt-3 text-slate-600">Manual renewal. No auto-billing. Pay again when your term ends.</p>
+      <p class="mt-3 text-slate-600">Unlock everything: all paid posts, all courses, all tools, and curated structured learning methods.</p>
+      <p class="mt-2 text-slate-600">Manual renewal. No auto-billing. Monthly is great for a short sprint; yearly is best value for multi-month preparation.</p>
     </section>
 
-    <section class="mt-12 grid gap-8 md:grid-cols-2" id="pricing-cards"></section>
+    <div id="pricing-loader" class="mt-12 flex justify-center items-center h-48">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+      <p class="ml-4 text-lg text-slate-600">Loading plans...</p>
+    </div>
+    <section class="mt-12 grid gap-8 md:grid-cols-2 hidden" id="pricing-cards" hidden></section>
   </main>
 </div>
 {{ end }}

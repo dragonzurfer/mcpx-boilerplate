@@ -11,7 +11,7 @@ Explore is a self-hosted newsletter + courses platform with:
 - Daily post analytics rollup (unique impressions + engagement aggregates)
 - Manual Razorpay renewals (no auto-renew)
 - SEO-first rendering (OG, JSON-LD, sitemap, RSS)
-- Guided tools with per-user usage limits (Career Copilot) using Gemini for resume analysis, mentor responses, chat replies, and voice transcription
+- Guided tools with per-user usage limits (Career Copilot) using Gemini for resume analysis, mentor responses, chat replies, and voice transcription, with focus-stage path previews across all focus/subfocus routes
 - Tool analytics rollups (daily aggregation of tool events)
 
 ## Request flow
@@ -58,6 +58,13 @@ HTTP -> Logger/Recovery
 - `tool_daily_metrics`
 - `payments`, `entitlements`
 - `site_settings`, `admin_audit_logs`
+
+## Database connectivity
+
+- `DB_DSN` is read from environment and normalized before GORM initializes MySQL.
+- DSN normalization enforces `parseTime=true` and `interpolateParams=true`, with managed-MySQL TLS defaults when not explicitly configured.
+- Connection pooling is configured at startup (`max open/idle: 25`, idle timeout: 2m, lifetime: 30m) to keep query latency stable under concurrent load.
+- A real-DB opt-in comparison test exists at `stores/store_latency_test.go` to compare `mysql` CLI query timing with GORM timing using the same `DB_DSN`.
 
 ## Payment flow (manual renewal)
 

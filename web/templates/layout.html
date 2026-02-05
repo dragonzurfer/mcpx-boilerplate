@@ -40,27 +40,21 @@
         --offwhite: {{ .Theme.OffWhite }};
       }
     </style>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              display: ["Space Grotesk", "sans-serif"],
-              body: ["Source Serif 4", "serif"],
-            },
-            colors: {
-              ink: "#0f172a",
-              mist: "var(--offwhite)",
-              primary: "var(--primary)",
-              skyline: "var(--primary)",
-              ember: "#f97316",
-              night: "#0b0f1a",
-            }
-          }
-        }
-      };
-    </script>
+    <style type="text/tailwindcss">
+      @import "tailwindcss";
+
+      @theme {
+        --font-display: "Space Grotesk", sans-serif;
+        --font-body: "Source Serif 4", serif;
+        --color-ink: #0f172a;
+        --color-mist: var(--offwhite);
+        --color-primary: var(--primary);
+        --color-skyline: var(--primary);
+        --color-ember: #f97316;
+        --color-night: #0b0f1a;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="/assets/styles.css" />
 
     {{ if .JSONLD }}
@@ -69,7 +63,12 @@
   </head>
   <body class="bg-mist text-ink min-h-screen">
     {{ block "content" . }}{{ end }}
-    <script src="https://cdn.jsdelivr.net/npm/@motionone/dom/dist/motion-one.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/motion@latest/dist/motion.js"></script>
+    <script>
+      if (window.Motion && !window.motion) {
+        window.motion = window.Motion;
+      }
+    </script>
     <script type="module" src="/assets/app.js"></script>
   </body>
 </html>

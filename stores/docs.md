@@ -19,6 +19,8 @@ GORM models and persistence helpers for Explore.
 
 ## Store helpers
 
+- MySQL DSN normalization (`normalizeDSN`) now enforces `parseTime=true`, `interpolateParams=true`, and safe TLS defaults for managed DBs before GORM opens the connection.
+- MySQL connection pool tuning is applied during `NewStore` (`max open/idle`, idle timeout, lifetime) to reduce connection churn.
 - User lookup + upsert with OAuth identity
 - Post/course CRUD + HTML cache update
 - Event batch ingest, anon merge, and daily post impression de-dup
@@ -29,3 +31,8 @@ GORM models and persistence helpers for Explore.
 - Tool daily rollups and tool-event retention cleanup
 - Payment/entitlement upsert and expiry
 - `NewStoreWithDB` helper for tests.
+
+## Verification tests
+
+- `store_dsn_test.go` validates DSN normalization defaults used by GORM.
+- `store_latency_test.go` adds an opt-in real-DB comparison test (`mysql` CLI vs GORM): set `RUN_DB_LATENCY_TEST=1` and `DB_DSN`.

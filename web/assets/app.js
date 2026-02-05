@@ -18,10 +18,14 @@ const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia
 const selectors = {
   page: () => document.querySelector("[data-page]"),
   postsGrid: () => document.getElementById("posts-grid"),
+  postsLoader: () => document.getElementById("posts-loader"),
+  toolsLoader: () => document.getElementById("tools-loader"),
+  pricingLoader: () => document.getElementById("pricing-loader"),
   coursesGrid: () => document.getElementById("courses-grid"),
   toolsGrid: () => document.getElementById("tools-grid"),
   pricingCards: () => document.getElementById("pricing-cards"),
   postBody: () => document.getElementById("post-body"),
+  postLoader: () => document.getElementById("post-loader"),
   courseBody: () => document.getElementById("course-body"),
   topicChips: () => document.getElementById("topic-chips"),
   navLogin: () => document.getElementById("nav-login"),
@@ -47,10 +51,14 @@ const init = async () => {
   state.user = getStoredUser();
   state.entitlement = getStoredEntitlement();
   state.anonId = getOrCreateAnonId();
-  state.config = await fetchJSON(API.config);
+  const page = selectors.page()?.dataset.page || "";
+  const authStateBeforeHydration = authStateFingerprint();
 
-  updateNavState();
-  await loadUser();
+  const userHydrationPromise = loadUser();
+  const configPromise = fetchJSON(API.config);
+  const pageRenderPromise = renderPageForRoute(page);
+
+  state.config = await configPromise;
   updateNavState();
   initNavActions();
   highlightNav();
@@ -58,7 +66,16 @@ const init = async () => {
   initSearchOverlay();
   initShareModal();
 
-  const page = selectors.page()?.dataset.page;
+  await pageRenderPromise;
+  await userHydrationPromise;
+  updateNavState();
+
+  if (authStateBeforeHydration !== authStateFingerprint()) {
+    await rerenderPageAfterAuthHydration(page);
+  }
+};
+
+const renderPageForRoute = async (page) => {
   if (page === "home") {
     await renderHome();
   }
@@ -110,6 +127,34 @@ const init = async () => {
   if (page === "admin-settings") {
     await renderAdminSettings();
   }
+};
+
+const rerenderPageAfterAuthHydration = async (page) => {
+  if (page === "home") {
+    await renderHome();
+  }
+  if (page === "courses") {
+    await renderCourses();
+  }
+  if (page === "tools") {
+    await renderTools();
+  }
+  if (page === "course") {
+    await renderCourse();
+  }
+  if (page === "account") {
+    await renderAccount();
+  }
+  if (page === "pricing") {
+    await renderPricing();
+  }
+};
+
+const authStateFingerprint = () => {
+  const userID = state.user?.id || state.user?.ID || 0;
+  const entitlementStatus = state.entitlement?.status || state.entitlement?.Status || "";
+  const tokenMarker = state.token ? "token" : "anon";
+  return `${tokenMarker}:${userID}:${entitlementStatus}`;
 };
 
 const fetchJSON = async (url, options = {}) => {
@@ -177,18 +222,53 @@ const authHeader = () => {
   return { Authorization: `Bearer ${state.token}` };
 };
 
+const listItemsFromResponse = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+
+  if (Array.isArray(payload.items)) return payload.items;
+  if (payload.data && Array.isArray(payload.data.items)) return payload.data.items;
+  if (Array.isArray(payload.posts)) return payload.posts;
+  if (payload.data && Array.isArray(payload.data.posts)) return payload.data.posts;
+
+  return [];
+};
+
+const setVisibility = (element, isVisible) => {
+  if (!element) return;
+  element.hidden = !isVisible;
+  element.classList.toggle("hidden", !isVisible);
+};
+
 const renderHome = async () => {
   const grid = selectors.postsGrid();
+  const loader = selectors.postsLoader();
   if (!grid) return;
 
-  const accessLevels = listingAccessLevels();
-  const data = await fetchJSON(`${API.posts}?access_level=${encodeURIComponent(accessLevels)}`, {
-    headers: authHeader()
-  });
-  const items = data.items || [];
+  setVisibility(loader, true);
+  setVisibility(grid, false);
 
-  grid.innerHTML = items.map(renderPostCard).join("");
-  animateIn(grid.children);
+  try {
+    const accessLevels = listingAccessLevels();
+    const data = await fetchJSON(`${API.posts}?access_level=${encodeURIComponent(accessLevels)}`, {
+      headers: authHeader()
+    });
+    const items = listItemsFromResponse(data);
+
+    if (items.length === 0) {
+      grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600\">No posts are available right now.</p>";
+    } else {
+      grid.innerHTML = items.map(renderPostCard).join("");
+    }
+    setVisibility(grid, true);
+    animateIn(grid.children);
+  } catch (err) {
+    console.error(err);
+    grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load posts right now. Please refresh and try again.</p>";
+    setVisibility(grid, true);
+  } finally {
+    setVisibility(loader, false);
+  }
 };
 
 const renderCourses = async () => {
@@ -207,12 +287,30 @@ const renderCourses = async () => {
 
 const renderTools = async () => {
   const grid = selectors.toolsGrid();
+  const loader = selectors.toolsLoader();
   if (!grid) return;
 
-  const data = await fetchJSON(API.tools, { headers: authHeader() });
-  const items = data.items || [];
-  grid.innerHTML = items.map(renderToolCard).join("");
-  animateIn(grid.children);
+  setVisibility(loader, true);
+  setVisibility(grid, false);
+
+  try {
+    const data = await fetchJSON(API.tools, { headers: authHeader() });
+    const items = listItemsFromResponse(data);
+
+    if (items.length === 0) {
+      grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600\">No tools are available right now.</p>";
+    } else {
+      grid.innerHTML = items.map(renderToolCard).join("");
+    }
+    setVisibility(grid, true);
+    animateIn(grid.children);
+  } catch (err) {
+    console.error(err);
+    grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load tools right now. Please refresh and try again.</p>";
+    setVisibility(grid, true);
+  } finally {
+    setVisibility(loader, false);
+  }
 };
 
 const renderTool = async () => {
@@ -250,7 +348,12 @@ const renderTool = async () => {
 
 const renderPost = async () => {
   const page = selectors.page();
+  const body = selectors.postBody();
+  const loader = selectors.postLoader();
   if (!page) return;
+
+  if (loader) loader.classList.remove("hidden");
+  if (body) body.classList.add("hidden");
 
   const slug = page.dataset.postSlug;
   const data = await fetchJSON(`${API.posts}/${slug}`, {
@@ -258,7 +361,9 @@ const renderPost = async () => {
   });
   state.post = data.post;
 
-  const body = selectors.postBody();
+  if (loader) loader.classList.add("hidden");
+  if (body) body.classList.remove("hidden");
+
   if (body) {
     body.innerHTML = data.html || "";
   }
@@ -1385,23 +1490,40 @@ const renderAdminSettings = async () => {
 
 const renderPricing = async () => {
   const container = selectors.pricingCards();
+  const loader = selectors.pricingLoader();
   if (!container) return;
 
-  const data = await fetchJSON(API.plans);
-  state.plans = data.plans || [];
+  setVisibility(loader, true);
+  setVisibility(container, false);
 
-  container.innerHTML = state.plans.map(renderPlanCard).join("");
+  try {
+    const data = await fetchJSON(API.plans);
+    state.plans = data.plans || [];
 
-  container.querySelectorAll("[data-plan]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const code = btn.dataset.plan;
-      if (!state.token) {
-        showLoginGate();
-        return;
-      }
-      openCheckout(code);
+    if (state.plans.length === 0) {
+      container.innerHTML = "<p class=\"col-span-full rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600\">No plans are available right now.</p>";
+    } else {
+      container.innerHTML = state.plans.map(renderPlanCard).join("");
+    }
+
+    container.querySelectorAll("[data-plan]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const code = btn.dataset.plan;
+        if (!state.token) {
+          showLoginGate();
+          return;
+        }
+        openCheckout(code);
+      });
     });
-  });
+    setVisibility(container, true);
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = "<p class=\"col-span-full rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load plans right now. Please refresh and try again.</p>";
+    setVisibility(container, true);
+  } finally {
+    setVisibility(loader, false);
+  }
 };
 
 const toolCatalog = {
@@ -1454,13 +1576,82 @@ const renderCourseCard = (course) => {
   `;
 };
 
+const formatINR = (amount) => {
+  const numeric = Number(amount) || 0;
+  return `₹${numeric.toLocaleString("en-IN")}`;
+};
+
+const findPlanByInterval = (interval) => {
+  const key = String(interval || "").toLowerCase();
+  return state.plans.find((plan) => String(plan.interval || "").toLowerCase() === key) || null;
+};
+
 const renderPlanCard = (plan) => {
   const highlight = plan.mostPopular ? "border-skyline/80" : "border-slate-200/60";
+  const interval = String(plan.interval || "").toLowerCase();
+  const isYearly = interval === "yearly";
+  const isMonthly = interval === "monthly";
+  const monthlyPlan = findPlanByInterval("monthly");
+  const yearlyPlan = findPlanByInterval("yearly");
+
+  let valueLine = "";
+  if (isYearly && monthlyPlan) {
+    const regularYearlyPrice = Number(monthlyPlan.priceInr || 0) * 12;
+    const yearlyPrice = Number(plan.priceInr || 0);
+    const savingsAmount = regularYearlyPrice - yearlyPrice;
+    const savingsPct = regularYearlyPrice > 0 ? Math.round((savingsAmount / regularYearlyPrice) * 100) : 0;
+    const effectiveMonthly = yearlyPrice > 0 ? Math.round(yearlyPrice / 12) : 0;
+    if (savingsAmount > 0) {
+      valueLine = `
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <span class="text-sm text-slate-500 line-through">${formatINR(regularYearlyPrice)}</span>
+          <span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">Save ${formatINR(savingsAmount)} (${savingsPct}% off)</span>
+        </div>
+        <p class="mt-2 text-sm text-slate-600">Effective ${formatINR(effectiveMonthly)}/month vs ${formatINR(monthlyPlan.priceInr)}/month on monthly.</p>
+      `;
+    }
+  }
+  if (isMonthly && yearlyPlan) {
+    const monthlyPrice = Number(plan.priceInr || 0);
+    const yearlyPrice = Number(yearlyPlan.priceInr || 0);
+    const savingsAmount = monthlyPrice*12 - yearlyPrice;
+    if (savingsAmount > 0) {
+      valueLine = `<p class="mt-2 text-sm text-slate-600">Best for 1-month prep. For multi-month prep, yearly saves ${formatINR(savingsAmount)} overall.</p>`;
+    }
+  }
+
+  const audienceLine = isYearly
+    ? "Recommended for multi-month preparation and consistent momentum."
+    : "Great for short, focused one-month preparation.";
+  const recommendedBadge = plan.mostPopular
+    ? `<span class="rounded-full bg-skyline/10 px-2 py-1 text-xs font-semibold text-skyline">Best value</span>`
+    : "";
+
+  const benefits = [
+    "All paid posts unlocked",
+    "All courses included",
+    "All tools included",
+    "Curated, structured learning methods",
+  ];
+
   return `
     <div class="rounded-3xl border ${highlight} bg-white/90 p-6">
-      <p class="text-xs uppercase tracking-wide text-slate-500">${plan.name}</p>
-      <h3 class="mt-4 font-display text-3xl text-ink">₹${plan.priceInr}</h3>
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-xs uppercase tracking-wide text-slate-500">${plan.name}</p>
+        ${recommendedBadge}
+      </div>
+      <h3 class="mt-4 font-display text-3xl text-ink">${formatINR(plan.priceInr)}</h3>
       <p class="text-slate-600">${plan.interval === "yearly" ? "per year" : "per month"}</p>
+      ${valueLine}
+      <p class="mt-3 text-sm text-slate-600">${audienceLine}</p>
+      <ul class="mt-4 space-y-2">
+        ${benefits
+          .map(
+            (benefit) =>
+              `<li class="flex items-start gap-2 text-sm text-slate-600"><span class="mt-0.5 text-emerald-600">✓</span><span>${benefit}</span></li>`,
+          )
+          .join("")}
+      </ul>
       <button data-plan="${plan.code}" class="mt-6 w-full rounded-full bg-skyline text-white py-3 font-semibold">Subscribe</button>
     </div>
   `;
@@ -1512,6 +1703,30 @@ const careerCopilotSubfocuses = {
   "Resume Improvement": ["ATS optimization", "Storytelling", "Portfolio alignment", "Project impact"],
   "Interview Preparation": ["Behavioral interviews", "System design", "Case interviews", "Portfolio walkthrough"],
   "General Career Advice": ["Clarity + direction", "Work-life balance", "Confidence boost", "Networking strategy"]
+};
+
+const normalizeCareerCopilotSelection = (session) => {
+  if (!session) return false;
+
+  let hasChanged = false;
+  const hasValidFocus = careerCopilotFocuses.includes(session.focus);
+  if (!hasValidFocus) {
+    if (session.focus || session.subfocus) {
+      session.focus = "";
+      session.subfocus = "";
+      hasChanged = true;
+    }
+    return hasChanged;
+  }
+
+  const allowedSubfocuses = careerCopilotSubfocuses[session.focus] || [];
+  const hasValidSubfocus = allowedSubfocuses.includes(session.subfocus);
+  if (session.subfocus && !hasValidSubfocus) {
+    session.subfocus = "";
+    hasChanged = true;
+  }
+
+  return hasChanged;
 };
 
 const careerCopilotQuestions = {
@@ -1856,6 +2071,10 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     pendingAudio: false
   };
 
+  if (normalizeCareerCopilotSelection(toolSession)) {
+    persistToolState(toolSession);
+  }
+
   if (!resumeState) {
     toolSession.usage.completed_stages = [];
     toolSession.stageSummaries = {};
@@ -2198,7 +2417,96 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
   }
 
   const focusOptions = document.getElementById("focus-options");
+  const focusPaths = document.getElementById("focus-paths");
   const focusContinue = document.getElementById("focus-continue");
+  const selectFocus = (session, nextFocus, nextSubfocus = "") => {
+    if (!careerCopilotFocuses.includes(nextFocus)) return;
+
+    session.focus = nextFocus;
+    const allowedSubfocuses = careerCopilotSubfocuses[nextFocus] || [];
+    if (nextSubfocus && allowedSubfocuses.includes(nextSubfocus)) {
+      session.subfocus = nextSubfocus;
+    } else if (!allowedSubfocuses.includes(session.subfocus)) {
+      session.subfocus = "";
+    }
+
+    persistToolState(session);
+    if (focusContinue) focusContinue.disabled = false;
+  };
+
+  const renderFocusPaths = (session) => {
+    if (!focusPaths) return;
+
+    focusPaths.innerHTML = careerCopilotFocuses.map((focus, focusIndex) => {
+      const description = careerCopilotFocusDescriptions[focus] || "Tailor the plan to this goal.";
+      const icon = careerCopilotFocusIcons[focus] || "star";
+      const tone = careerCopilotFocusTones[focus] || "is-slate";
+      const items = careerCopilotSubfocuses[focus] || [];
+      const isFocusSelected = session.focus === focus;
+      const safeFocus = escapeHTML(focus);
+      const safeDescription = escapeHTML(description);
+
+      return `
+        <article class="focus-path-card ${isFocusSelected ? "is-selected" : ""}">
+          <button type="button" class="focus-path-card-header" data-focus-index="${focusIndex}">
+            <span class="tool-option-icon ${tone}"><i data-lucide="${icon}"></i></span>
+            <div>
+              <p class="focus-path-title">${safeFocus}</p>
+              <p class="focus-path-description">${safeDescription}</p>
+            </div>
+          </button>
+          <div class="focus-path-chip-list">
+            ${items.map((subfocus, subfocusIndex) => {
+              const isSubfocusSelected = isFocusSelected && session.subfocus === subfocus;
+              const safeSubfocus = escapeHTML(subfocus);
+              return `
+                <button
+                  type="button"
+                  class="focus-path-chip ${isSubfocusSelected ? "is-selected" : ""}"
+                  data-focus-index="${focusIndex}"
+                  data-subfocus-index="${subfocusIndex}"
+                >
+                  ${safeSubfocus}
+                </button>
+              `;
+            }).join("")}
+          </div>
+        </article>
+      `;
+    }).join("");
+
+    focusPaths.querySelectorAll(".focus-path-card-header").forEach((button) => {
+      button.addEventListener("click", () => {
+        const focusIndex = Number(button.dataset.focusIndex);
+        const focusValue = careerCopilotFocuses[focusIndex] || "";
+        selectFocus(session, focusValue);
+        focusOptions?.querySelectorAll(".focus-card").forEach((card) => {
+          const isMatch = card.dataset.value === session.focus;
+          card.classList.toggle("is-selected", isMatch);
+        });
+        renderFocusPaths(session);
+      });
+    });
+
+    focusPaths.querySelectorAll(".focus-path-chip").forEach((button) => {
+      button.addEventListener("click", () => {
+        const focusIndex = Number(button.dataset.focusIndex);
+        const focusValue = careerCopilotFocuses[focusIndex] || "";
+        const subfocusItems = careerCopilotSubfocuses[focusValue] || [];
+        const subfocusIndex = Number(button.dataset.subfocusIndex);
+        const subfocusValue = subfocusItems[subfocusIndex] || "";
+        selectFocus(session, focusValue, subfocusValue);
+        focusOptions?.querySelectorAll(".focus-card").forEach((card) => {
+          const isMatch = card.dataset.value === session.focus;
+          card.classList.toggle("is-selected", isMatch);
+        });
+        renderFocusPaths(session);
+      });
+    });
+
+    refreshLucide();
+  };
+
   if (focusOptions) {
     focusOptions.innerHTML = careerCopilotFocuses.map((focus) => {
       const icon = careerCopilotFocusIcons[focus] || "star";
@@ -2218,11 +2526,13 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     }).join("");
     focusOptions.querySelectorAll(".focus-card").forEach((btn) => {
       btn.addEventListener("click", () => {
-        focusOptions.querySelectorAll(".focus-card").forEach((el) => el.classList.remove("is-selected"));
-        btn.classList.add("is-selected");
-        toolSession.focus = btn.dataset.value;
-        persistToolState(toolSession);
-        if (focusContinue) focusContinue.disabled = false;
+        const focusValue = btn.dataset.value || "";
+        selectFocus(toolSession, focusValue);
+        focusOptions.querySelectorAll(".focus-card").forEach((el) => {
+          const isMatch = el.dataset.value === toolSession.focus;
+          el.classList.toggle("is-selected", isMatch);
+        });
+        renderFocusPaths(toolSession);
       });
     });
     if (toolSession.focus) {
@@ -2232,7 +2542,10 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
       });
       if (focusContinue) focusContinue.disabled = false;
     }
+    renderFocusPaths(toolSession);
     refreshLucide();
+  } else {
+    renderFocusPaths(toolSession);
   }
   if (focusContinue) {
     focusContinue.addEventListener("click", async () => {
@@ -2247,7 +2560,17 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
     const subfocusOptions = document.getElementById("subfocus-options");
     const subfocusContinue = document.getElementById("subfocus-continue");
     if (!subfocusOptions) return;
+
+    if (subfocusContinue) {
+      subfocusContinue.disabled = true;
+    }
+
     const items = careerCopilotSubfocuses[session.focus] || [];
+    if (items.length === 0) {
+      subfocusOptions.innerHTML = `<p class="text-sm text-slate-500 text-center">Select a focus first to continue.</p>`;
+      return;
+    }
+
     subfocusOptions.innerHTML = items.map((subfocus) => `
       <button class="tool-option-card subfocus-card" data-value="${subfocus}">
         <span class="tool-option-icon ${careerCopilotSubfocusTone}"><i data-lucide="${careerCopilotSubfocusIcon}"></i></span>
@@ -2265,6 +2588,7 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
         session.subfocus = btn.dataset.value;
         persistToolState(session);
         if (subfocusContinue) subfocusContinue.disabled = false;
+        renderFocusPaths(session);
       });
     });
     if (session.subfocus) {
@@ -2274,6 +2598,7 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
       });
       if (subfocusContinue) subfocusContinue.disabled = false;
     }
+    renderFocusPaths(session);
     refreshLucide();
   };
 

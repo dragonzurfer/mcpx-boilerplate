@@ -2,8 +2,10 @@ package stores
 
 import (
 	"strings"
+	"time"
 
-	"gorm.io/driver/mysql"
+	driver "github.com/go-sql-driver/mysql"
+	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -15,8 +17,12 @@ type Store struct {
 func NewStore(dsn string) (*Store, error) {
 	prepared := normalizeDSN(dsn)
 
-	db, err := gorm.Open(mysql.Open(prepared), &gorm.Config{})
+	db, err := gorm.Open(gormmysql.Open(prepared), &gorm.Config{})
 	if err != nil {
+		return nil, err
+	}
+
+	if err := configureConnectionPool(db); err != nil {
 		return nil, err
 	}
 
@@ -72,22 +78,69 @@ func NewStoreWithDB(db *gorm.DB) *Store {
 
 func normalizeDSN(dsn string) string {
 	trimmed := strings.TrimSpace(dsn)
-	if strings.Contains(trimmed, "tls=true") {
-		return strings.ReplaceAll(trimmed, "tls=true", "tls=skip-verify")
+	if trimmed == "" {
+		return ""
 	}
-	if !strings.Contains(trimmed, "tls=") {
-		if strings.Contains(trimmed, "?") {
-			trimmed += "&tls=skip-verify"
-		} else {
-			trimmed += "?tls=skip-verify"
-		}
+
+	parsedDSN, err := driver.ParseDSN(trimmed)
+	if err != nil {
+		return normalizeDSNFallback(trimmed)
 	}
-	if !strings.Contains(trimmed, "parseTime=") {
-		if strings.Contains(trimmed, "?") {
-			trimmed += "&parseTime=true"
-		} else {
-			trimmed += "?parseTime=true"
-		}
+
+	parsedDSN.ParseTime = true
+	parsedDSN.InterpolateParams = true
+	parsedDSN.TLSConfig = normalizeTLSPolicy(parsedDSN.TLSConfig)
+	if parsedDSN.Loc == nil {
+		parsedDSN.Loc = time.UTC
 	}
-	return trimmed
+
+	return parsedDSN.FormatDSN()
+}
+
+func configureConnectionPool(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(25)
+	sqlDB.SetConnMaxIdleTime(2 * time.Minute)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	return nil
+}
+
+func normalizeTLSPolicy(rawTLS string) string {
+	tlsPolicy := strings.TrimSpace(rawTLS)
+	if tlsPolicy == "" || tlsPolicy == "true" {
+		return "skip-verify"
+	}
+	return tlsPolicy
+}
+
+func normalizeDSNFallback(dsn string) string {
+	normalized := dsn
+	if strings.Contains(normalized, "tls=true") {
+		normalized = strings.ReplaceAll(normalized, "tls=true", "tls=skip-verify")
+	}
+	if !strings.Contains(normalized, "tls=") {
+		normalized = appendDSNParam(normalized, "tls=skip-verify")
+	}
+	if !strings.Contains(normalized, "parseTime=") {
+		normalized = appendDSNParam(normalized, "parseTime=true")
+	}
+	if !strings.Contains(normalized, "interpolateParams=") {
+		normalized = appendDSNParam(normalized, "interpolateParams=true")
+	}
+	if !strings.Contains(normalized, "loc=") {
+		normalized = appendDSNParam(normalized, "loc=UTC")
+	}
+	return normalized
+}
+
+func appendDSNParam(dsn string, queryParam string) string {
+	if strings.Contains(dsn, "?") {
+		return dsn + "&" + queryParam
+	}
+	return dsn + "?" + queryParam
 }

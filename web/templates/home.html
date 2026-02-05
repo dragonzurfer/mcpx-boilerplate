@@ -11,7 +11,11 @@
 
     <section class="mt-10 flex flex-wrap gap-2" id="topic-chips"></section>
 
-    <section class="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3" id="posts-grid"></section>
+    <div id="posts-loader" class="flex justify-center items-center h-48">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+      <p class="ml-4 text-lg text-slate-600">Loading posts...</p>
+    </div>
+    <section class="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3 hidden" id="posts-grid" hidden></section>
 
     <section class="mt-16 rounded-3xl border border-slate-200 bg-white/80 p-8 text-center" id="cta-login-section">
       <h2 class="font-display text-2xl text-ink">Save your favorite posts and track progress</h2>

@@ -9,7 +9,11 @@
       <p class="mt-4 text-slate-600 text-lg">Use guided copilots to plan, improve, and ship your next move with clarity.</p>
     </section>
 
-    <section class="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3" id="tools-grid"></section>
+    <div id="tools-loader" class="mt-10 flex justify-center items-center h-48">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+      <p class="ml-4 text-lg text-slate-600">Loading tools...</p>
+    </div>
+    <section class="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3 hidden" id="tools-grid" hidden></section>
   </main>
 </div>
 {{ end }}
