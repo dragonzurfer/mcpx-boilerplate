@@ -6,8 +6,8 @@ Shared navigation partials for Explore pages and admin pages.
 
 ## Files
 
-- `nav.html`: primary site navigation bar (public pages).
-- `admin_nav.html`: admin navigation bar (admin pages).
+- `nav.html`: primary site navigation bar (public pages, including the re-enabled `Courses` link).
+- `admin_nav.html`: admin navigation bar (admin pages, including `Courses` management).
 
 ## Notes
 

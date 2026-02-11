@@ -155,7 +155,7 @@ func resolveDescription(input MetaBuildInput) string {
 		if input.Course == nil {
 			return ""
 		}
-		return buildDescription(input.Course.MetaDescription, input.Course.Excerpt, input.Course.BodyMarkdown)
+		return buildDescription(input.Course.MetaDescription, resolveCourseDescription(input.Course), input.Course.BodyMarkdown)
 	case PageTypeHome:
 		return strings.TrimSpace(input.Site.SiteName)
 	default:
@@ -212,6 +212,17 @@ func resolveEntityImage(input MetaBuildInput) string {
 	default:
 		return ""
 	}
+}
+
+func resolveCourseDescription(course *stores.CourseModel) string {
+	if course == nil {
+		return ""
+	}
+	description := strings.TrimSpace(course.Description)
+	if description != "" {
+		return description
+	}
+	return strings.TrimSpace(course.Excerpt)
 }
 
 func defaultOgImageURL(input MetaBuildInput, defaults metaDefaultsOutput) string {

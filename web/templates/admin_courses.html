@@ -1,0 +1,147 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="admin-courses">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-4xl">
+      <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Courses</p>
+      <h1 class="mt-3 font-display text-3xl lg:text-5xl text-ink">Course builder</h1>
+      <p class="mt-4 text-slate-600 text-lg">Create course cards, structured metadata, modules, and lessons.</p>
+    </section>
+
+    {{ template "admin_nav" . }}
+
+    <div id="admin-courses-error" class="hidden mt-8 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-700"></div>
+
+    <section class="mt-10 grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+      <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <div class="flex flex-wrap items-center gap-3">
+          <input id="courses-query" placeholder="Search courses" class="flex-1 rounded-full bg-white border border-slate-200 px-4 py-2 text-slate-700" />
+          <select id="courses-status" class="rounded-full bg-white border border-slate-200 px-4 py-2 text-slate-700">
+            <option value="">All statuses</option>
+            <option value="PUBLISHED">Published</option>
+            <option value="DRAFT">Draft</option>
+            <option value="SCHEDULED">Scheduled</option>
+            <option value="ARCHIVED">Archived</option>
+          </select>
+          <button id="courses-refresh" class="px-4 py-2 rounded-full border border-slate-200 text-slate-700">Refresh</button>
+        </div>
+        <div class="mt-6 overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th class="py-3">Title</th>
+                <th class="py-3">Difficulty</th>
+                <th class="py-3">Status</th>
+                <th class="py-3">Lessons</th>
+                <th class="py-3"></th>
+              </tr>
+            </thead>
+            <tbody id="courses-table" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Editor</p>
+        <h2 class="mt-3 font-display text-2xl text-ink" id="course-editor-title">New course</h2>
+        <form id="course-editor" class="mt-6 space-y-4">
+          <input type="hidden" id="course-id" />
+          <input id="course-title" placeholder="Course title" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="course-slug" placeholder="Course slug" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <textarea id="course-description" rows="3" placeholder="Course description" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+          <input id="course-thumbnail" placeholder="Thumbnail / cover image URL" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+
+          <div class="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+            <p class="text-xs uppercase tracking-wide text-slate-500">Metadata</p>
+            <input id="course-meta-target-audience" placeholder="Who this course is for (comma separated)" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
+            <input id="course-meta-tags" placeholder="Tags (comma separated)" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
+            <div class="grid gap-3 md:grid-cols-2">
+              <select id="course-meta-difficulty" class="rounded-2xl border border-slate-200 px-4 py-3 text-slate-700">
+                <option value="">Select difficulty</option>
+                <option value="Beginner">Beginner</option>
+                <option value="Intermediate">Intermediate</option>
+                <option value="Advanced">Advanced</option>
+              </select>
+              <input id="course-meta-duration" placeholder="Estimated duration (e.g., 6 hours)" class="rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
+            </div>
+            <input id="course-meta-skills" placeholder="Skills covered (comma separated)" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
+            <input id="course-meta-highlights" placeholder="Marketing highlights (comma separated)" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
+          </div>
+
+          <div class="grid gap-3 md:grid-cols-2">
+            <select id="course-access" class="rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700">
+              <option value="PUBLIC">PUBLIC</option>
+              <option value="TRIAL">TRIAL</option>
+              <option value="PAID">PAID</option>
+            </select>
+            <select id="course-status" class="rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700">
+              <option value="DRAFT">DRAFT</option>
+              <option value="PUBLISHED">PUBLISHED</option>
+              <option value="SCHEDULED">SCHEDULED</option>
+              <option value="ARCHIVED">ARCHIVED</option>
+            </select>
+          </div>
+
+          <input id="course-published" placeholder="Published at (YYYY-MM-DD)" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <textarea id="course-body" rows="4" placeholder="Course intro markdown (optional)" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+
+          <input id="course-meta-title" placeholder="Meta title" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="course-meta-description" placeholder="Meta description" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="course-meta-image" placeholder="Meta image URL" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="course-canonical" placeholder="Canonical URL" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <label class="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" id="course-noindex" class="rounded border-slate-300" />
+            No index
+          </label>
+
+          <div class="flex flex-wrap gap-3">
+            <button type="submit" class="flex-1 rounded-full bg-primary text-white py-3 font-semibold">Save course</button>
+            <button type="button" id="course-reset" class="flex-1 rounded-full border border-slate-200 text-slate-700 py-3">Reset</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="mt-10 rounded-3xl border border-slate-200 bg-white/80 p-6" id="course-structure-panel">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-slate-500">Modules & Lessons</p>
+          <h3 class="mt-2 font-display text-2xl text-ink" id="course-structure-title">Select a course to manage modules</h3>
+        </div>
+      </div>
+      <div class="mt-6 grid gap-3 md:grid-cols-[1fr_auto]">
+        <input id="course-module-title" placeholder="New module title" class="rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
+        <button id="course-module-add" class="rounded-full bg-primary px-6 py-3 text-white font-semibold">Add module</button>
+      </div>
+      <div id="course-modules" class="mt-6 space-y-4"></div>
+
+      <form id="course-lesson-editor" class="mt-8 space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Lesson editor</p>
+        <input type="hidden" id="course-lesson-id" />
+        <input type="hidden" id="course-lesson-module-id" />
+        <input id="course-lesson-title" placeholder="Lesson title" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
+        <input id="course-lesson-slug" placeholder="Lesson slug" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
+        <div class="grid gap-3 md:grid-cols-2">
+          <input id="course-lesson-vimeo" placeholder="Vimeo URL (optional)" class="rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
+          <select id="course-lesson-status" class="rounded-2xl border border-slate-200 px-4 py-3 text-slate-700">
+            <option value="DRAFT">DRAFT</option>
+            <option value="PUBLISHED">PUBLISHED</option>
+            <option value="SCHEDULED">SCHEDULED</option>
+            <option value="ARCHIVED">ARCHIVED</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" id="course-lesson-free" class="rounded border-slate-300" />
+          Free lesson
+        </label>
+        <textarea id="course-lesson-body" rows="8" placeholder="Lesson markdown content" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+        <div class="flex gap-3">
+          <button type="submit" class="flex-1 rounded-full bg-primary text-white py-3 font-semibold">Save lesson</button>
+          <button type="button" id="course-lesson-reset" class="flex-1 rounded-full border border-slate-200 py-3 text-slate-700">Reset lesson form</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+{{ end }}

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcpx/boilerplate/middleware"
@@ -19,7 +18,21 @@ type CoursesHandler struct {
 
 func (h *CoursesHandler) Register(rg *gin.RouterGroup) {
 	rg.GET("/courses", h.list)
-	rg.GET("/courses/:slug", h.get)
+
+	rg.GET(
+		"/courses/:slug",
+		middleware.RequireCourseAuthentication(),
+		middleware.CourseEntitlement(h.Service.Store),
+		h.get,
+	)
+
+	rg.GET(
+		"/courses/:slug/lessons/:lessonSlug",
+		middleware.RequireCourseAuthentication(),
+		middleware.CourseEntitlement(h.Service.Store),
+		middleware.LessonAccess(h.Service.Store),
+		h.getLesson,
+	)
 }
 
 func (h *CoursesHandler) list(c *gin.Context) {
@@ -30,7 +43,7 @@ func (h *CoursesHandler) list(c *gin.Context) {
 	status := stores.CourseStatusPublished
 	query := strings.TrimSpace(c.Query("q"))
 
-	output, err := h.Service.ListCourses(stores.CourseListInput{
+	courseListOutput, err := h.Service.ListCourses(stores.CourseListInput{
 		AccessLevels: accessLevels,
 		Status:       status,
 		Query:        query,
@@ -42,67 +55,182 @@ func (h *CoursesHandler) list(c *gin.Context) {
 		return
 	}
 
-	items := make([]gin.H, 0, len(output.Courses))
-	for _, course := range output.Courses {
-		items = append(items, gin.H{
-			"id":           course.ID,
-			"slug":         course.Slug,
-			"title":        course.Title,
-			"excerpt":      course.Excerpt,
-			"access_level": course.AccessLevel,
-			"status":       course.Status,
-			"published_at": course.PublishedAt,
-		})
+	courseIDs := collectCourseIDs(courseListOutput.Courses)
+	courseCounts, err := h.Service.Store.GetCourseContentCounts(stores.CourseContentCountsInput{
+		CourseIDs:          courseIDs,
+		IncludeUnpublished: false,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load course counts"})
+		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"items": items, "total": output.Total})
+	items := make([]gin.H, 0, len(courseListOutput.Courses))
+	for _, courseModel := range courseListOutput.Courses {
+		items = append(items, publicCourseSummary(courseModel, courseCounts[courseModel.ID]))
+	}
+
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": courseListOutput.Total})
 }
 
 func (h *CoursesHandler) get(c *gin.Context) {
-	slug := strings.TrimSpace(c.Param("slug"))
-	if slug == "" {
+	courseSlug := strings.TrimSpace(c.Param("slug"))
+	if courseSlug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "slug required"})
 		return
 	}
 
-	viewer, _ := middleware.CurrentUser(c)
-	output, err := h.Service.GetCourseBySlug(services.CourseAccessInput{
-		Slug:         slug,
-		Viewer:       viewer,
-		Now:          time.Now().UTC(),
-		UseHTMLCache: true,
-	})
+	courseModel, err := h.Service.Store.GetCourseBySlug(stores.CourseLookupInput{Slug: courseSlug})
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "course not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load course"})
+		handleCourseLoadError(c, err)
 		return
 	}
 
-	payload := gin.H{
+	if strings.ToUpper(strings.TrimSpace(courseModel.Status)) != stores.CourseStatusPublished {
+		c.JSON(http.StatusNotFound, gin.H{"error": "course not found"})
+		return
+	}
+
+	courseStructure, err := h.Service.Store.GetCourseStructure(stores.CourseStructureInput{
+		CourseID:           courseModel.ID,
+		IncludeUnpublished: false,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load course structure"})
+		return
+	}
+
+	entitlementActive := middleware.CurrentCourseEntitlement(c)
+	moduleItems, firstLessonSlug := buildPublicCourseModules(courseStructure.Modules, entitlementActive)
+
+	courseMetadata := stores.ParseCourseMetadata(courseModel.MetadataJSON)
+	courseMetadata.ModuleCount = len(moduleItems)
+	courseMetadata.LessonCount = courseStructure.LessonCount
+
+	c.JSON(http.StatusOK, gin.H{
 		"course": gin.H{
-			"id":           output.Course.ID,
-			"slug":         output.Course.Slug,
-			"title":        output.Course.Title,
-			"excerpt":      output.Course.Excerpt,
-			"access_level": output.Course.AccessLevel,
-			"status":       output.Course.Status,
-			"published_at": output.Course.PublishedAt,
+			"id":                   courseModel.ID,
+			"slug":                 courseModel.Slug,
+			"title":                courseModel.Title,
+			"description":          resolveCourseTextDescription(*courseModel),
+			"thumbnail_url":        courseModel.ThumbnailURL,
+			"metadata":             courseMetadata,
+			"modules":              moduleItems,
+			"module_count":         courseMetadata.ModuleCount,
+			"lesson_count":         courseMetadata.LessonCount,
+			"selected_lesson_slug": firstLessonSlug,
 		},
-		"access_level": output.AccessLevel,
-		"is_locked":    output.IsLocked,
-		"gate":         gatePayload(services.PostAccessOutput{IsLocked: output.IsLocked, GateType: output.GateType}),
+		"entitlement_active": entitlementActive,
+	})
+}
+
+func (h *CoursesHandler) getLesson(c *gin.Context) {
+	lessonModel, ok := middleware.CurrentCourseLesson(c)
+	if !ok || lessonModel == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "lesson not found"})
+		return
 	}
 
-	if output.IsLocked {
-		payload["html"] = output.TeaserHTML
-		payload["teaser_html"] = output.TeaserHTML
-	} else {
-		payload["html"] = output.HTML
-		payload["teaser_html"] = output.TeaserHTML
+	htmlOutput, err := renderCourseLessonHTML(h.Service.Store, lessonModel)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to render lesson"})
+		return
 	}
 
-	c.JSON(http.StatusOK, payload)
+	c.JSON(http.StatusOK, gin.H{
+		"lesson":             adminCourseLessonSummary(*lessonModel, false),
+		"html":               htmlOutput,
+		"is_locked":          false,
+		"entitlement_active": middleware.CurrentCourseEntitlement(c),
+	})
+}
+
+func handleCourseLoadError(c *gin.Context, err error) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "course not found"})
+		return
+	}
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load course"})
+}
+
+func publicCourseSummary(courseModel stores.CourseModel, courseCount stores.CourseContentCount) gin.H {
+	courseMetadata := stores.ParseCourseMetadata(courseModel.MetadataJSON)
+	if courseCount.ModuleCount > 0 {
+		courseMetadata.ModuleCount = courseCount.ModuleCount
+	}
+	if courseCount.LessonCount > 0 {
+		courseMetadata.LessonCount = courseCount.LessonCount
+	}
+
+	return gin.H{
+		"id":            courseModel.ID,
+		"slug":          courseModel.Slug,
+		"title":         courseModel.Title,
+		"description":   resolveCourseTextDescription(courseModel),
+		"thumbnail_url": courseModel.ThumbnailURL,
+		"metadata":      courseMetadata,
+		"tags":          courseMetadata.Tags,
+		"difficulty":    courseMetadata.Difficulty,
+		"module_count":  courseMetadata.ModuleCount,
+		"lesson_count":  courseMetadata.LessonCount,
+	}
+}
+
+func buildPublicCourseModules(modules []stores.CourseModuleWithLessons, entitlementActive bool) ([]gin.H, string) {
+	moduleItems := make([]gin.H, 0, len(modules))
+	selectedLessonSlug := ""
+	for _, moduleWithLessons := range modules {
+		lessonItems := make([]gin.H, 0, len(moduleWithLessons.Lessons))
+		for _, lessonModel := range moduleWithLessons.Lessons {
+			isLocked := !lessonModel.IsFree && !entitlementActive
+			if selectedLessonSlug == "" && !isLocked {
+				selectedLessonSlug = lessonModel.Slug
+			}
+			lessonItems = append(lessonItems, adminCourseLessonSummary(lessonModel, isLocked))
+		}
+
+		moduleItems = append(moduleItems, gin.H{
+			"id":       moduleWithLessons.Module.ID,
+			"title":    moduleWithLessons.Module.Title,
+			"position": moduleWithLessons.Module.Position,
+			"lessons":  lessonItems,
+		})
+	}
+
+	return moduleItems, selectedLessonSlug
+}
+
+func renderCourseLessonHTML(store *stores.Store, lessonModel *stores.CourseLessonModel) (string, error) {
+	if lessonModel == nil {
+		return "", gorm.ErrRecordNotFound
+	}
+
+	cachedHTML := strings.TrimSpace(lessonModel.BodyHTMLCache)
+	if cachedHTML != "" {
+		return cachedHTML, nil
+	}
+
+	markdownOutput, err := services.RenderMarkdown(services.MarkdownRenderInput{Markdown: lessonMarkdownForRender(*lessonModel)})
+	if err != nil {
+		return "", err
+	}
+
+	renderedHTML := markdownOutput.HTML
+	_ = store.UpdateCourseLessonHTMLCache(stores.CourseLessonHTMLCacheInput{LessonID: lessonModel.ID, HTML: renderedHTML})
+	return renderedHTML, nil
+}
+
+func lessonMarkdownForRender(lessonModel stores.CourseLessonModel) string {
+	lessonMarkdown := strings.TrimSpace(lessonModel.BodyMarkdown)
+	vimeoURL := strings.TrimSpace(lessonModel.VimeoURL)
+	if vimeoURL == "" {
+		return lessonMarkdown
+	}
+	if strings.Contains(lessonMarkdown, vimeoURL) {
+		return lessonMarkdown
+	}
+	if lessonMarkdown == "" {
+		return vimeoURL
+	}
+	return lessonMarkdown + "\n\n" + vimeoURL
 }

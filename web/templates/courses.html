@@ -5,10 +5,14 @@
   <main class="px-6 lg:px-16 pb-24">
     <section class="max-w-3xl">
       <h1 class="font-display text-4xl lg:text-5xl text-ink">Courses built for deep work.</h1>
-      <p class="mt-3 text-slate-600">Structured learning paths with practice checkpoints and curated resources.</p>
+      <p class="mt-3 text-slate-600">Explore structured paths with clear module outcomes, practical lessons, and guided milestones.</p>
     </section>
 
-    <section class="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-3" id="courses-grid"></section>
+    <div id="courses-loader" class="mt-10 flex justify-center items-center h-40">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+      <p class="ml-4 text-lg text-slate-600">Loading courses...</p>
+    </div>
+    <section class="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-3 hidden" id="courses-grid" hidden></section>
   </main>
 </div>
 {{ end }}

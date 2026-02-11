@@ -5,6 +5,7 @@
 Explore is a self-hosted newsletter + courses platform with:
 
 - Markdown content with Vimeo embeds (sanitized HTML)
+- Course catalog with structured metadata JSON, module/lesson hierarchy, and per-lesson free/paid access flags
 - Public / Trial / Paid access levels
 - Engagement-based funnel scoring
 - Promo decision engine (trial-only)
@@ -21,17 +22,19 @@ HTTP -> Logger/Recovery
      -> / (pages): SSR templates + static assets
      -> /api: OptionalAuth -> RateLimiter
         -> /api/auth/login
-        -> /api/posts, /api/courses (public + optional auth)
+        -> /api/posts, /api/courses (public + optional auth listing)
         -> /api/tools, /api/tools/:slug (public + optional auth)
         -> /api/events/batch, /api/promos/decide
         -> /api/plans (public)
         -> /api/payments/webhook (public, signed)
         -> /api/* (authed): Auth -> RateLimiter
             -> /api/me
+            -> /api/courses/:slug, /api/courses/:slug/lessons/:lessonSlug
             -> /api/tools/:slug/action
             -> /api/tools/:slug/resume, /mentor, /chat, /transcribe
             -> /api/payments/create-order, /confirm
         -> /api/admin/*: Auth -> RequireAdminRole
+            -> /api/admin/courses (course metadata + module/lesson CRUD/reorder)
             -> /api/admin/tools (tool gating + tracking settings)
 ```
 
@@ -50,7 +53,7 @@ HTTP -> Logger/Recovery
 
 - `users`, `oauth_identities`
 - `posts`, `tags`, `post_tags`
-- `courses`, `course_modules`, `course_lessons`
+- `courses` (includes `metadata_json`, `thumbnail_url`, `description`), `course_modules`, `course_lessons` (`is_free` for lesson gating)
 - `events`, `post_impressions`, `post_daily_metrics`, `post_promo_daily_metrics`, `user_metrics`
 - `funnel_config`, `funnel_event_weights`, `funnel_stage_thresholds`
 - `promos`, `promo_variants`, `promo_decisions`, `promo_impressions`, `promo_clicks`

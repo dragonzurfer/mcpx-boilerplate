@@ -34,6 +34,7 @@ func LoadTemplates() (map[string]*template.Template, error) {
 		"account":              filepath.Join("web", "templates", "account.html"),
 		"admin_dashboard":      filepath.Join("web", "templates", "admin_dashboard.html"),
 		"admin_posts":          filepath.Join("web", "templates", "admin_posts.html"),
+		"admin_courses":        filepath.Join("web", "templates", "admin_courses.html"),
 		"admin_post_analytics": filepath.Join("web", "templates", "admin_post_analytics.html"),
 		"admin_funnel":         filepath.Join("web", "templates", "admin_funnel.html"),
 		"admin_promos":         filepath.Join("web", "templates", "admin_promos.html"),
@@ -65,6 +66,7 @@ func (h *PageHandler) Register(r *gin.Engine) {
 	r.GET("/account", h.account)
 	r.GET("/admin", h.adminDashboard)
 	r.GET("/admin/posts", h.adminPosts)
+	r.GET("/admin/courses", h.adminCourses)
 	r.GET("/admin/posts/:id/analytics", h.adminPostAnalytics)
 	r.GET("/admin/funnel", h.adminFunnel)
 	r.GET("/admin/promos", h.adminPromos)
@@ -276,6 +278,15 @@ func (h *PageHandler) adminPosts(c *gin.Context) {
 	meta.Robots = "noindex,nofollow"
 	data := pageData{Meta: meta, JSONLD: template.JS(meta.JSONLD), Theme: resolveTheme(settings)}
 	h.renderTemplate(c, "admin_posts", data)
+}
+
+func (h *PageHandler) adminCourses(c *gin.Context) {
+	settings := h.resolveSiteSettings()
+	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
+	meta.Title = "Admin Courses | " + meta.SiteName
+	meta.Robots = "noindex,nofollow"
+	data := pageData{Meta: meta, JSONLD: template.JS(meta.JSONLD), Theme: resolveTheme(settings)}
+	h.renderTemplate(c, "admin_courses", data)
 }
 
 func (h *PageHandler) adminPostAnalytics(c *gin.Context) {

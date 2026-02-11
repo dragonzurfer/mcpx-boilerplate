@@ -148,7 +148,11 @@ func (h *SEOHandler) ogCourse(c *gin.Context) {
 	}
 
 	title := course.Title
-	subtitle := buildOGSubtitle(course.Excerpt, course.BodyMarkdown)
+	courseDescription := strings.TrimSpace(course.Description)
+	if courseDescription == "" {
+		courseDescription = strings.TrimSpace(course.Excerpt)
+	}
+	subtitle := buildOGSubtitle(courseDescription, course.BodyMarkdown)
 	if subtitle == "" {
 		subtitle = "Explore courses at explore"
 	}

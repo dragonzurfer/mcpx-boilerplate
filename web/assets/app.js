@@ -5,6 +5,8 @@ const state = {
   plans: [],
   anonId: null,
   post: null,
+  course: null,
+  courseLesson: null,
   entitlement: null,
   tool: null,
   toolUsage: null,
@@ -19,6 +21,7 @@ const selectors = {
   page: () => document.querySelector("[data-page]"),
   postsGrid: () => document.getElementById("posts-grid"),
   postsLoader: () => document.getElementById("posts-loader"),
+  coursesLoader: () => document.getElementById("courses-loader"),
   toolsLoader: () => document.getElementById("tools-loader"),
   pricingLoader: () => document.getElementById("pricing-loader"),
   coursesGrid: () => document.getElementById("courses-grid"),
@@ -108,6 +111,9 @@ const renderPageForRoute = async (page) => {
   }
   if (page === "admin-posts") {
     await renderAdminPosts();
+  }
+  if (page === "admin-courses") {
+    await renderAdminCourses();
   }
   if (page === "admin-funnel") {
     await renderAdminFunnel();
@@ -238,6 +244,14 @@ const setVisibility = (element, isVisible) => {
   if (!element) return;
   element.hidden = !isVisible;
   element.classList.toggle("hidden", !isVisible);
+
+  if (isVisible) {
+    element.style.removeProperty("display");
+    return;
+  }
+
+  // Inline fallback prevents utility class order from keeping hidden loaders visible.
+  element.style.setProperty("display", "none", "important");
 };
 
 const renderHome = async () => {
@@ -273,16 +287,32 @@ const renderHome = async () => {
 
 const renderCourses = async () => {
   const grid = selectors.coursesGrid();
+  const loader = selectors.coursesLoader();
   if (!grid) return;
 
-  const accessLevels = listingAccessLevels();
-  const data = await fetchJSON(`${API.courses}?access_level=${encodeURIComponent(accessLevels)}`, {
-    headers: authHeader()
-  });
-  const items = data.items || [];
+  setVisibility(loader, true);
+  setVisibility(grid, false);
 
-  grid.innerHTML = items.map(renderCourseCard).join("");
-  animateIn(grid.children);
+  try {
+    const accessLevels = listingAccessLevels();
+    const data = await fetchJSON(`${API.courses}?access_level=${encodeURIComponent(accessLevels)}`, {
+      headers: authHeader()
+    });
+    const items = data.items || [];
+    if (items.length === 0) {
+      grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600\">No courses are available right now.</p>";
+    } else {
+      grid.innerHTML = items.map(renderCourseCard).join("");
+    }
+    setVisibility(grid, true);
+    animateIn(grid.children);
+  } catch (err) {
+    console.error(err);
+    grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load courses right now. Please refresh and try again.</p>";
+    setVisibility(grid, true);
+  } finally {
+    setVisibility(loader, false);
+  }
 };
 
 const renderTools = async () => {
@@ -388,20 +418,169 @@ const renderCourse = async () => {
   if (!page) return;
 
   const slug = page.dataset.courseSlug;
-  const data = await fetchJSON(`${API.courses}/${slug}`, {
-    headers: state.token ? { Authorization: `Bearer ${state.token}` } : {}
+  if (!slug) return;
+
+  let data;
+  try {
+    data = await fetchJSON(`${API.courses}/${slug}`, {
+      headers: authHeader()
+    });
+  } catch (err) {
+    if (err.status === 401) {
+      showLoginGate();
+      return;
+    }
+    const body = selectors.courseBody();
+    if (body) {
+      body.innerHTML = "<p class=\"rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load course right now.</p>";
+    }
+    return;
+  }
+
+  const course = data.course || null;
+  if (!course) return;
+
+  state.course = course;
+  const titleEl = document.getElementById("course-title");
+  const descriptionEl = document.getElementById("course-description");
+  if (titleEl) titleEl.textContent = course.title || "Course";
+  if (descriptionEl) descriptionEl.textContent = course.description || "";
+
+  await initCourseExplorer({
+    course,
+    entitlementActive: Boolean(data.entitlement_active)
   });
+};
 
+const initCourseExplorer = async ({ course }) => {
+  const modules = Array.isArray(course.modules) ? course.modules : [];
+  const sidebar = document.getElementById("course-modules-sidebar");
+  const roadmapMeta = document.getElementById("course-roadmap-meta");
+  const lessonTitle = document.getElementById("course-lesson-title");
+  const lessonMeta = document.getElementById("course-lesson-meta");
   const body = selectors.courseBody();
-  if (body) {
-    body.innerHTML = data.html || "";
+
+  if (!sidebar || !body) return;
+
+  const totalLessons = modules.reduce((count, module) => count + ((module.lessons || []).length), 0);
+  if (roadmapMeta) {
+    roadmapMeta.textContent = `${totalLessons} lesson${totalLessons === 1 ? "" : "s"}`;
   }
 
-  if (data.is_locked && data.gate?.type === "LOGIN_REQUIRED") {
-    showLoginGate();
+  let expandedModuleID = modules[0]?.id || 0;
+  let selectedLessonSlug = course.selected_lesson_slug || findFirstUnlockedLessonSlug(modules);
+
+  const renderSidebar = () => {
+    sidebar.innerHTML = modules
+      .map((module) => {
+        const lessons = Array.isArray(module.lessons) ? module.lessons : [];
+        const isExpanded = module.id === expandedModuleID;
+        return `
+          <div class="rounded-2xl border border-slate-200 bg-white p-3">
+            <button class="w-full flex items-center justify-between gap-3 text-left" data-course-module="${module.id}">
+              <span class="font-semibold text-slate-800">${module.title || "Module"}</span>
+              <span class="text-xs text-slate-500">${lessons.length} lessons</span>
+            </button>
+            <div class="mt-3 space-y-2 ${isExpanded ? "" : "hidden"}" data-course-module-panel="${module.id}">
+              ${lessons.map((lesson) => renderCourseLessonLink(lesson, selectedLessonSlug)).join("")}
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    sidebar.querySelectorAll("[data-course-module]").forEach((button) => {
+      button.addEventListener("click", () => {
+        expandedModuleID = Number(button.dataset.courseModule || 0);
+        renderSidebar();
+      });
+    });
+
+    sidebar.querySelectorAll("[data-course-lesson]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const lessonSlug = button.dataset.courseLesson;
+        const lessonLocked = button.dataset.courseLessonLocked === "true";
+        if (!lessonSlug) return;
+        if (lessonLocked) {
+          showPaywallGate();
+          return;
+        }
+
+        selectedLessonSlug = lessonSlug;
+        renderSidebar();
+        await loadCourseLessonContent(course.slug, lessonSlug, { body, lessonTitle, lessonMeta });
+      });
+    });
+  };
+
+  renderSidebar();
+
+  if (!selectedLessonSlug) {
+    if (lessonTitle) lessonTitle.textContent = "No unlocked lessons yet";
+    if (lessonMeta) lessonMeta.textContent = "Upgrade to unlock paid lessons";
+    body.innerHTML = "<p class=\"rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-600\">You can browse the course roadmap on the left. Paid lessons unlock with a plan.</p>";
+    return;
   }
-  if (data.is_locked && data.gate?.type === "PAYWALL") {
-    showPaywallGate();
+
+  await loadCourseLessonContent(course.slug, selectedLessonSlug, { body, lessonTitle, lessonMeta });
+};
+
+const renderCourseLessonLink = (lesson, selectedLessonSlug) => {
+  const isLocked = Boolean(lesson.is_locked);
+  const isSelected = lesson.slug === selectedLessonSlug;
+  const lockIcon = isLocked ? "&#128274;" : "&#128275;";
+  const lockLabel = isLocked ? "Locked" : "Unlocked";
+  const selectedClasses = isSelected ? "border-primary/60 bg-primary/5" : "border-slate-200 bg-white";
+  return `
+    <button class="w-full rounded-xl border ${selectedClasses} px-3 py-2 text-left transition hover:border-primary/50" data-course-lesson="${lesson.slug}" data-course-lesson-locked="${isLocked}">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-sm text-slate-800">${lesson.title || "Lesson"}</span>
+        <span class="text-xs text-slate-500">${lockIcon} ${lockLabel}</span>
+      </div>
+    </button>
+  `;
+};
+
+const findFirstUnlockedLessonSlug = (modules) => {
+  for (const module of modules) {
+    const lessons = Array.isArray(module.lessons) ? module.lessons : [];
+    const unlockedLesson = lessons.find((lesson) => !lesson.is_locked);
+    if (unlockedLesson?.slug) {
+      return unlockedLesson.slug;
+    }
+  }
+  return "";
+};
+
+const loadCourseLessonContent = async (courseSlug, lessonSlug, elements) => {
+  if (!courseSlug || !lessonSlug) return;
+  try {
+    const data = await fetchJSON(`${API.courses}/${courseSlug}/lessons/${lessonSlug}`, {
+      headers: authHeader()
+    });
+    if (data.is_locked && data.gate?.type === "PAYWALL") {
+      showPaywallGate();
+      return;
+    }
+
+    const lesson = data.lesson || {};
+    if (elements.lessonTitle) {
+      elements.lessonTitle.textContent = lesson.title || "Lesson";
+    }
+    if (elements.lessonMeta) {
+      elements.lessonMeta.textContent = lesson.is_free ? "Free lesson" : "Members lesson";
+    }
+    if (elements.body) {
+      elements.body.innerHTML = data.html || "";
+    }
+  } catch (err) {
+    if (err.status === 401) {
+      showLoginGate();
+      return;
+    }
+    if (elements.body) {
+      elements.body.innerHTML = "<p class=\"rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load this lesson right now.</p>";
+    }
   }
 };
 
@@ -743,6 +922,436 @@ const renderAdminPosts = async () => {
   };
 
   await loadPosts();
+};
+
+const renderAdminCourses = async () => {
+  const errorEl = document.getElementById("admin-courses-error");
+  clearError(errorEl);
+  if (!requireAdmin(errorEl)) return;
+
+  const table = document.getElementById("courses-table");
+  const queryInput = document.getElementById("courses-query");
+  const statusSelect = document.getElementById("courses-status");
+  const refreshBtn = document.getElementById("courses-refresh");
+  const editorTitle = document.getElementById("course-editor-title");
+  const editorForm = document.getElementById("course-editor");
+  const moduleTitleInput = document.getElementById("course-module-title");
+  const moduleAddBtn = document.getElementById("course-module-add");
+  const modulesContainer = document.getElementById("course-modules");
+  const structureTitle = document.getElementById("course-structure-title");
+  const lessonForm = document.getElementById("course-lesson-editor");
+  const lessonResetBtn = document.getElementById("course-lesson-reset");
+
+  let selectedCourseID = 0;
+  let selectedCourse = null;
+
+  const resetCourseEditor = () => {
+    if (editorForm) editorForm.reset();
+    document.getElementById("course-id").value = "";
+    selectedCourseID = 0;
+    selectedCourse = null;
+    if (editorTitle) editorTitle.textContent = "New course";
+    if (structureTitle) structureTitle.textContent = "Select a course to manage modules";
+    if (modulesContainer) modulesContainer.innerHTML = "";
+    resetLessonEditor();
+  };
+
+  const resetLessonEditor = (moduleID = "") => {
+    if (lessonForm) lessonForm.reset();
+    document.getElementById("course-lesson-id").value = "";
+    document.getElementById("course-lesson-module-id").value = moduleID ? String(moduleID) : "";
+    document.getElementById("course-lesson-status").value = "DRAFT";
+  };
+
+  const buildCoursePayload = () => {
+    const publishedAtRaw = document.getElementById("course-published").value;
+    return {
+      slug: document.getElementById("course-slug").value.trim(),
+      title: document.getElementById("course-title").value.trim(),
+      description: document.getElementById("course-description").value.trim(),
+      thumbnail_url: document.getElementById("course-thumbnail").value.trim(),
+      metadata: {
+        target_audience: splitTags(document.getElementById("course-meta-target-audience").value),
+        tags: splitTags(document.getElementById("course-meta-tags").value),
+        difficulty: document.getElementById("course-meta-difficulty").value,
+        estimated_duration: document.getElementById("course-meta-duration").value.trim(),
+        skills_covered: splitTags(document.getElementById("course-meta-skills").value),
+        highlights: splitTags(document.getElementById("course-meta-highlights").value)
+      },
+      access_level: document.getElementById("course-access").value,
+      status: document.getElementById("course-status").value,
+      published_at: toISODate(publishedAtRaw),
+      body_markdown: document.getElementById("course-body").value.trim(),
+      meta_title: document.getElementById("course-meta-title").value.trim(),
+      meta_description: document.getElementById("course-meta-description").value.trim(),
+      meta_image_url: document.getElementById("course-meta-image").value.trim(),
+      canonical_url: document.getElementById("course-canonical").value.trim(),
+      noindex: document.getElementById("course-noindex").checked
+    };
+  };
+
+  const loadCourses = async () => {
+    if (!table) return;
+    try {
+      clearError(errorEl);
+      const params = new URLSearchParams();
+      if (queryInput?.value) params.set("q", queryInput.value.trim());
+      if (statusSelect?.value) params.set("status", statusSelect.value);
+      const data = await fetchJSON(`/api/admin/courses?${params.toString()}`);
+      const items = data.items || [];
+      table.innerHTML = items.map(renderAdminCourseRow).join("");
+      table.querySelectorAll("[data-edit-course]").forEach((button) => {
+        button.addEventListener("click", () => loadCourseDetail(button.dataset.editCourse));
+      });
+    } catch (err) {
+      setError(errorEl, err.message || "Failed to load courses.");
+    }
+  };
+
+  const loadCourseDetail = async (courseID) => {
+    if (!courseID) return;
+    try {
+      clearError(errorEl);
+      const data = await fetchJSON(`/api/admin/courses/${courseID}`);
+      const course = data.course || {};
+      selectedCourseID = Number(course.id) || 0;
+      selectedCourse = course;
+      fillCourseEditor(course);
+      renderCourseModules(course);
+      if (editorTitle) editorTitle.textContent = `Editing: ${course.title || "Course"}`;
+      if (structureTitle) structureTitle.textContent = `Modules: ${course.title || "Course"}`;
+      resetLessonEditor();
+    } catch (err) {
+      setError(errorEl, err.message || "Failed to load course details.");
+    }
+  };
+
+  const fillCourseEditor = (course) => {
+    const metadata = course.metadata || {};
+    document.getElementById("course-id").value = course.id || "";
+    document.getElementById("course-title").value = course.title || "";
+    document.getElementById("course-slug").value = course.slug || "";
+    document.getElementById("course-description").value = course.description || "";
+    document.getElementById("course-thumbnail").value = course.thumbnail_url || "";
+    document.getElementById("course-meta-target-audience").value = (metadata.target_audience || []).join(", ");
+    document.getElementById("course-meta-tags").value = (metadata.tags || []).join(", ");
+    document.getElementById("course-meta-difficulty").value = metadata.difficulty || "";
+    document.getElementById("course-meta-duration").value = metadata.estimated_duration || "";
+    document.getElementById("course-meta-skills").value = (metadata.skills_covered || []).join(", ");
+    document.getElementById("course-meta-highlights").value = (metadata.highlights || []).join(", ");
+    document.getElementById("course-access").value = course.access_level || "PUBLIC";
+    document.getElementById("course-status").value = course.status || "DRAFT";
+    document.getElementById("course-published").value = formatDate(course.published_at);
+    document.getElementById("course-body").value = course.body_markdown || "";
+    document.getElementById("course-meta-title").value = course.meta_title || "";
+    document.getElementById("course-meta-description").value = course.meta_description || "";
+    document.getElementById("course-meta-image").value = course.meta_image_url || "";
+    document.getElementById("course-canonical").value = course.canonical_url || "";
+    document.getElementById("course-noindex").checked = Boolean(course.noindex);
+  };
+
+  const renderCourseModules = (course) => {
+    if (!modulesContainer) return;
+    const modules = Array.isArray(course.modules) ? course.modules : [];
+    modulesContainer.innerHTML = modules
+      .map((module, moduleIndex) => {
+        const lessons = Array.isArray(module.lessons) ? module.lessons : [];
+        return `
+          <div class="rounded-2xl border border-slate-200 bg-white p-4" data-module-id="${module.id}">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p class="font-semibold text-slate-800">${module.title || "Module"}</p>
+                <p class="text-xs text-slate-500">${lessons.length} lessons</p>
+              </div>
+              <div class="flex flex-wrap gap-2 text-xs">
+                <button class="rounded-full border border-slate-200 px-3 py-1" data-module-up="${module.id}" ${moduleIndex === 0 ? "disabled" : ""}>Up</button>
+                <button class="rounded-full border border-slate-200 px-3 py-1" data-module-down="${module.id}" ${moduleIndex === modules.length - 1 ? "disabled" : ""}>Down</button>
+                <button class="rounded-full border border-slate-200 px-3 py-1" data-module-rename="${module.id}">Rename</button>
+                <button class="rounded-full border border-slate-200 px-3 py-1" data-module-add-lesson="${module.id}">Add lesson</button>
+                <button class="rounded-full border border-rose-300 px-3 py-1 text-rose-600" data-module-delete="${module.id}">Delete</button>
+              </div>
+            </div>
+            <div class="mt-3 space-y-2">
+              ${lessons.map((lesson, lessonIndex) => renderAdminLessonRow(lesson, module.id, lessonIndex, lessons.length)).join("")}
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    bindModuleActions(modules);
+  };
+
+  const bindModuleActions = (modules) => {
+    if (!modulesContainer) return;
+
+    modulesContainer.querySelectorAll("[data-module-up]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const moduleID = Number(button.dataset.moduleUp || 0);
+        await reorderModules(modules, moduleID, -1);
+      });
+    });
+    modulesContainer.querySelectorAll("[data-module-down]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const moduleID = Number(button.dataset.moduleDown || 0);
+        await reorderModules(modules, moduleID, 1);
+      });
+    });
+    modulesContainer.querySelectorAll("[data-module-rename]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const moduleID = Number(button.dataset.moduleRename || 0);
+        const module = modules.find((item) => Number(item.id) === moduleID);
+        if (!module) return;
+        const title = prompt("Module title", module.title || "");
+        if (!title) return;
+        await fetchJSON(`/api/admin/courses/${selectedCourseID}/modules/${moduleID}`, {
+          method: "PUT",
+          body: JSON.stringify({ title })
+        });
+        await loadCourseDetail(String(selectedCourseID));
+      });
+    });
+    modulesContainer.querySelectorAll("[data-module-delete]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const moduleID = Number(button.dataset.moduleDelete || 0);
+        if (!moduleID) return;
+        if (!confirm("Delete this module and its lessons?")) return;
+        await fetchJSON(`/api/admin/courses/${selectedCourseID}/modules/${moduleID}`, { method: "DELETE" });
+        await loadCourseDetail(String(selectedCourseID));
+      });
+    });
+    modulesContainer.querySelectorAll("[data-module-add-lesson]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const moduleID = Number(button.dataset.moduleAddLesson || 0);
+        if (!moduleID) return;
+        resetLessonEditor(moduleID);
+        document.getElementById("course-lesson-title").focus();
+      });
+    });
+
+    modulesContainer.querySelectorAll("[data-lesson-edit]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const moduleID = Number(button.dataset.lessonModule || 0);
+        const lessonID = Number(button.dataset.lessonEdit || 0);
+        const module = modules.find((item) => Number(item.id) === moduleID);
+        const lesson = (module?.lessons || []).find((item) => Number(item.id) === lessonID);
+        if (!lesson) return;
+        fillLessonEditor(moduleID, lesson);
+      });
+    });
+    modulesContainer.querySelectorAll("[data-lesson-delete]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const moduleID = Number(button.dataset.lessonModule || 0);
+        const lessonID = Number(button.dataset.lessonDelete || 0);
+        if (!moduleID || !lessonID) return;
+        if (!confirm("Delete this lesson?")) return;
+        await fetchJSON(`/api/admin/courses/${selectedCourseID}/modules/${moduleID}/lessons/${lessonID}`, { method: "DELETE" });
+        await loadCourseDetail(String(selectedCourseID));
+      });
+    });
+    modulesContainer.querySelectorAll("[data-lesson-up]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const moduleID = Number(button.dataset.lessonModule || 0);
+        const lessonID = Number(button.dataset.lessonUp || 0);
+        await reorderLessons(modules, moduleID, lessonID, -1);
+      });
+    });
+    modulesContainer.querySelectorAll("[data-lesson-down]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const moduleID = Number(button.dataset.lessonModule || 0);
+        const lessonID = Number(button.dataset.lessonDown || 0);
+        await reorderLessons(modules, moduleID, lessonID, 1);
+      });
+    });
+  };
+
+  const fillLessonEditor = (moduleID, lesson) => {
+    document.getElementById("course-lesson-id").value = lesson.id || "";
+    document.getElementById("course-lesson-module-id").value = moduleID || "";
+    document.getElementById("course-lesson-title").value = lesson.title || "";
+    document.getElementById("course-lesson-slug").value = lesson.slug || "";
+    document.getElementById("course-lesson-vimeo").value = lesson.vimeo_url || "";
+    document.getElementById("course-lesson-status").value = lesson.status || "DRAFT";
+    document.getElementById("course-lesson-free").checked = Boolean(lesson.is_free);
+    document.getElementById("course-lesson-body").value = lesson.body_markdown || "";
+  };
+
+  const reorderModules = async (modules, moduleID, direction) => {
+    const index = modules.findIndex((item) => Number(item.id) === moduleID);
+    if (index < 0) return;
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= modules.length) return;
+    const reordered = modules.map((item) => item.id);
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(nextIndex, 0, moved);
+    await fetchJSON(`/api/admin/courses/${selectedCourseID}/modules/reorder`, {
+      method: "PUT",
+      body: JSON.stringify({ module_ids: reordered })
+    });
+    await loadCourseDetail(String(selectedCourseID));
+  };
+
+  const reorderLessons = async (modules, moduleID, lessonID, direction) => {
+    const module = modules.find((item) => Number(item.id) === moduleID);
+    const lessons = module?.lessons || [];
+    const index = lessons.findIndex((item) => Number(item.id) === lessonID);
+    if (index < 0) return;
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= lessons.length) return;
+    const reordered = lessons.map((item) => item.id);
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(nextIndex, 0, moved);
+    await fetchJSON(`/api/admin/courses/${selectedCourseID}/modules/${moduleID}/lessons/reorder`, {
+      method: "PUT",
+      body: JSON.stringify({ lesson_ids: reordered })
+    });
+    await loadCourseDetail(String(selectedCourseID));
+  };
+
+  if (refreshBtn) refreshBtn.addEventListener("click", loadCourses);
+  if (queryInput) queryInput.addEventListener("change", loadCourses);
+  if (statusSelect) statusSelect.addEventListener("change", loadCourses);
+
+  if (editorForm) {
+    editorForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError(errorEl);
+      const payload = buildCoursePayload();
+      const validationError = validateCoursePayload(payload);
+      if (validationError) {
+        setError(errorEl, validationError);
+        return;
+      }
+      try {
+        const courseID = document.getElementById("course-id").value;
+        const method = courseID ? "PUT" : "POST";
+        const url = courseID ? `/api/admin/courses/${courseID}` : "/api/admin/courses";
+        const response = await fetchJSON(url, { method, body: JSON.stringify(payload) });
+        showToast("Course saved");
+        await loadCourses();
+        const savedCourseID = response?.course?.id || courseID;
+        if (savedCourseID) {
+          await loadCourseDetail(String(savedCourseID));
+        } else {
+          resetCourseEditor();
+        }
+      } catch (err) {
+        setError(errorEl, err.message || "Failed to save course.");
+      }
+    });
+  }
+
+  const resetBtn = document.getElementById("course-reset");
+  if (resetBtn) resetBtn.addEventListener("click", resetCourseEditor);
+
+  if (moduleAddBtn) {
+    moduleAddBtn.addEventListener("click", async () => {
+      if (!selectedCourseID) {
+        setError(errorEl, "Save and select a course first.");
+        return;
+      }
+      const title = moduleTitleInput?.value.trim();
+      if (!title) {
+        setError(errorEl, "Module title is required.");
+        return;
+      }
+      clearError(errorEl);
+      try {
+        await fetchJSON(`/api/admin/courses/${selectedCourseID}/modules`, {
+          method: "POST",
+          body: JSON.stringify({ title })
+        });
+        if (moduleTitleInput) moduleTitleInput.value = "";
+        showToast("Module added");
+        await loadCourseDetail(String(selectedCourseID));
+      } catch (err) {
+        setError(errorEl, err.message || "Failed to add module.");
+      }
+    });
+  }
+
+  if (lessonForm) {
+    lessonForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError(errorEl);
+      if (!selectedCourseID) {
+        setError(errorEl, "Save and select a course first.");
+        return;
+      }
+
+      const lessonID = document.getElementById("course-lesson-id").value;
+      const moduleID = document.getElementById("course-lesson-module-id").value;
+      const payload = {
+        title: document.getElementById("course-lesson-title").value.trim(),
+        slug: document.getElementById("course-lesson-slug").value.trim(),
+        vimeo_url: document.getElementById("course-lesson-vimeo").value.trim(),
+        status: document.getElementById("course-lesson-status").value,
+        is_free: document.getElementById("course-lesson-free").checked,
+        body_markdown: document.getElementById("course-lesson-body").value.trim()
+      };
+      const validationError = validateCourseLessonPayload(payload, moduleID);
+      if (validationError) {
+        setError(errorEl, validationError);
+        return;
+      }
+
+      try {
+        const method = lessonID ? "PUT" : "POST";
+        const path = lessonID
+          ? `/api/admin/courses/${selectedCourseID}/modules/${moduleID}/lessons/${lessonID}`
+          : `/api/admin/courses/${selectedCourseID}/modules/${moduleID}/lessons`;
+        await fetchJSON(path, { method, body: JSON.stringify(payload) });
+        showToast("Lesson saved");
+        resetLessonEditor(moduleID);
+        await loadCourseDetail(String(selectedCourseID));
+      } catch (err) {
+        setError(errorEl, err.message || "Failed to save lesson.");
+      }
+    });
+  }
+
+  if (lessonResetBtn) {
+    lessonResetBtn.addEventListener("click", () => {
+      const moduleID = document.getElementById("course-lesson-module-id").value;
+      resetLessonEditor(moduleID);
+    });
+  }
+
+  resetCourseEditor();
+  await loadCourses();
+};
+
+const renderAdminCourseRow = (course) => {
+  const difficulty = course.metadata?.difficulty || "—";
+  return `
+    <tr>
+      <td class="py-4 text-slate-800">${course.title || "Untitled"}</td>
+      <td class="py-4 text-slate-600">${difficulty}</td>
+      <td class="py-4 text-slate-600">${course.status || "DRAFT"}</td>
+      <td class="py-4 text-slate-600">${course.lesson_count || 0}</td>
+      <td class="py-4 text-right"><button class="text-primary" data-edit-course="${course.id}">Edit</button></td>
+    </tr>
+  `;
+};
+
+const renderAdminLessonRow = (lesson, moduleID, lessonIndex, totalLessons) => {
+  const label = lesson.is_free ? "Free" : "Paid";
+  return `
+    <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p class="text-sm text-slate-800">${lesson.title || "Lesson"}</p>
+          <p class="text-xs text-slate-500">${label} · ${lesson.status || "DRAFT"}</p>
+        </div>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <button class="rounded-full border border-slate-200 px-3 py-1" data-lesson-up="${lesson.id}" data-lesson-module="${moduleID}" ${lessonIndex === 0 ? "disabled" : ""}>Up</button>
+          <button class="rounded-full border border-slate-200 px-3 py-1" data-lesson-down="${lesson.id}" data-lesson-module="${moduleID}" ${lessonIndex === totalLessons - 1 ? "disabled" : ""}>Down</button>
+          <button class="rounded-full border border-slate-200 px-3 py-1" data-lesson-edit="${lesson.id}" data-lesson-module="${moduleID}">Edit</button>
+          <button class="rounded-full border border-rose-300 px-3 py-1 text-rose-600" data-lesson-delete="${lesson.id}" data-lesson-module="${moduleID}">Delete</button>
+        </div>
+      </div>
+    </div>
+  `;
 };
 
 const renderAdminFunnel = async () => {
@@ -1566,12 +2175,33 @@ const renderPostCard = (post) => {
 };
 
 const renderCourseCard = (course) => {
+  const metadata = course.metadata || {};
+  const tags = Array.isArray(course.tags) && course.tags.length > 0
+    ? course.tags
+    : Array.isArray(metadata.tags)
+      ? metadata.tags
+      : [];
+  const moduleCount = Number(course.module_count || metadata.module_count || 0);
+  const lessonCount = Number(course.lesson_count || metadata.lesson_count || 0);
+  const difficulty = course.difficulty || metadata.difficulty || "All levels";
+  const thumbnail = course.thumbnail_url || "";
+  const highlights = Array.isArray(metadata.highlights) ? metadata.highlights.slice(0, 1) : [];
+
   return `
-    <a href="/course/${course.slug}" class="rounded-3xl border border-slate-200/60 bg-white/90 p-6 hover:border-ember/60 transition">
-      <div class="text-xs uppercase tracking-wide text-slate-500">${course.access_level}</div>
-      <h3 class="mt-4 font-display text-xl text-ink">${course.title}</h3>
-      <p class="mt-2 text-slate-600 text-sm">${course.excerpt || ""}</p>
-      <div class="mt-4 text-ember text-sm">Start course →</div>
+    <a href="/course/${course.slug}" class="rounded-3xl border border-slate-200/60 bg-white/90 p-5 hover:border-ember/60 transition flex flex-col">
+      ${thumbnail ? `<img src="${thumbnail}" alt="${course.title || "Course"} thumbnail" class="h-40 w-full object-cover rounded-2xl border border-slate-100" />` : ""}
+      <div class="mt-4 text-xs uppercase tracking-wide text-slate-500">${difficulty}</div>
+      <h3 class="mt-2 font-display text-xl text-ink">${course.title}</h3>
+      <p class="mt-2 text-slate-600 text-sm">${course.description || ""}</p>
+      ${highlights.length > 0 ? `<p class="mt-3 text-xs text-slate-500">${highlights[0]}</p>` : ""}
+      <div class="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
+        ${tags.slice(0, 3).map((tag) => `<span class="rounded-full border border-slate-200 px-2 py-1">${tag}</span>`).join("")}
+      </div>
+      <div class="mt-4 flex items-center justify-between text-sm text-slate-600">
+        <span>${moduleCount} modules</span>
+        <span>${lessonCount} lessons</span>
+      </div>
+      <div class="mt-5 rounded-full bg-ember text-white text-center py-2 font-semibold">Open Course</div>
     </a>
   `;
 };
@@ -3352,6 +3982,23 @@ const validatePostPayload = (payload) => {
   if (!payload.body_markdown) return "Post body is required.";
   if (!payload.access_level) return "Access level is required.";
   if (!payload.status) return "Status is required.";
+  return null;
+};
+
+const validateCoursePayload = (payload) => {
+  if (!payload.slug) return "Course slug is required.";
+  if (!payload.title) return "Course title is required.";
+  if (!payload.description) return "Course description is required.";
+  if (!payload.status) return "Course status is required.";
+  if (!payload.metadata?.difficulty) return "Course difficulty is required.";
+  return null;
+};
+
+const validateCourseLessonPayload = (payload, moduleID) => {
+  if (!moduleID) return "Select a module before saving a lesson.";
+  if (!payload.title) return "Lesson title is required.";
+  if (!payload.slug) return "Lesson slug is required.";
+  if (!payload.body_markdown) return "Lesson body markdown is required.";
   return null;
 };
 

@@ -128,6 +128,9 @@ func main() {
 	adminPosts := &routes.AdminPostsHandler{Store: store}
 	adminPosts.Register(admin)
 
+	adminCourses := &routes.AdminCoursesHandler{Store: store}
+	adminCourses.Register(admin)
+
 	adminFunnel := &routes.AdminFunnelHandler{Store: store}
 	adminFunnel.Register(admin)
 
