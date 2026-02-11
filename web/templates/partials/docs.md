@@ -6,7 +6,7 @@ Shared navigation partials for Explore pages and admin pages.
 
 ## Files
 
-- `nav.html`: primary site navigation bar (public pages, including the re-enabled `Courses` link).
+- `nav.html`: primary site navigation bar (public pages, including the re-enabled `Courses` link) with a Google sign-in button slot (`#nav-login`) rendered by `web/assets/app.js`.
 - `admin_nav.html`: admin navigation bar (admin pages, including `Courses` management).
 
 ## Notes

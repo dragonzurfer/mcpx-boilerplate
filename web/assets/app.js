@@ -10,7 +10,8 @@ const state = {
   entitlement: null,
   tool: null,
   toolUsage: null,
-  toolConfig: null
+  toolConfig: null,
+  googleIdentityReady: false
 };
 
 const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia
@@ -2717,10 +2718,9 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
   const requireSignIn = Boolean(freeRules.require_sign_in);
   if (requireSignIn && !state.user) {
     stageContainer.classList.add("pointer-events-none", "opacity-70");
-    showOverlay({
+    showGoogleLoginOverlay({
       title: "Sign in required",
-      message: "Sign in to use Career Copilot and save your progress.",
-      primary: { text: "Continue with Google", action: promptGoogleLogin }
+      message: "Sign in to use Career Copilot and save your progress."
     });
   }
 
@@ -3004,10 +3004,9 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
   if (analyzeBtn) {
     analyzeBtn.addEventListener("click", async () => {
       if (!state.user && requireSignIn) {
-        showOverlay({
+        showGoogleLoginOverlay({
           title: "Sign in required",
-          message: "Continue with Google to upload your resume.",
-          primary: { text: "Continue with Google", action: promptGoogleLogin }
+          message: "Continue with Google to upload your resume."
         });
         return;
       }
@@ -3512,10 +3511,9 @@ const initChatFlow = (session, freeRules) => {
 
   const sendMessage = async () => {
     if (!state.user && freeRules.require_sign_in) {
-      showOverlay({
+      showGoogleLoginOverlay({
         title: "Sign in required",
-        message: "Continue with Google to keep chatting.",
-        primary: { text: "Continue with Google", action: promptGoogleLogin }
+        message: "Continue with Google to keep chatting."
       });
       return;
     }
@@ -3682,10 +3680,9 @@ const initChatFlow = (session, freeRules) => {
 
   const startMic = async () => {
     if (!state.user && freeRules.require_sign_in) {
-      showOverlay({
+      showGoogleLoginOverlay({
         title: "Sign in required",
-        message: "Sign in to use voice input.",
-        primary: { text: "Continue with Google", action: promptGoogleLogin }
+        message: "Sign in to use voice input."
       });
       return;
     }
@@ -4405,23 +4402,19 @@ const formatPercent = (value) => {
 };
 
 const initLoginButtons = () => {
-  const loginButtons = [selectors.navLogin(), selectors.ctaLogin()].filter(Boolean);
-  if (loginButtons.length === 0) return;
+  const loginTargets = [selectors.navLogin(), selectors.ctaLogin()].filter(Boolean);
+  if (loginTargets.length === 0) return;
 
-  loginButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (!window.google?.accounts?.id) {
-        loadGoogleScript();
-        setTimeout(() => promptGoogleLogin(), 800);
-        return;
-      }
-      promptGoogleLogin();
+  if (!state.config?.googleClientId) {
+    loginTargets.forEach((target) => {
+      target.textContent = "Continue with Google";
     });
-  });
-
-  if (state.config?.googleClientId) {
-    loadGoogleScript();
+    return;
   }
+
+  loginTargets.forEach((target) => {
+    queueGoogleButton(target);
+  });
 };
 
 const initSearchOverlay = () => {
@@ -4497,6 +4490,64 @@ const initShareModal = () => {
   });
 };
 
+const googleButtonQueue = new Map();
+
+const buildGoogleButtonOptions = (target) => {
+  const size = target.dataset.googleSize || "large";
+  const widthValue = Number(target.dataset.googleWidth || 0);
+  const options = {
+    type: "standard",
+    theme: "filled_blue",
+    size,
+    text: "continue_with",
+    shape: "pill",
+    logo_alignment: "left"
+  };
+  if (widthValue > 0) {
+    options.width = widthValue;
+  }
+  return options;
+};
+
+const renderGoogleButton = (target) => {
+  if (!state.googleIdentityReady) return;
+  if (target.dataset.googleRendered === "true") return;
+  const options = buildGoogleButtonOptions(target);
+  target.innerHTML = "";
+  window.google.accounts.id.renderButton(target, options);
+  target.dataset.googleRendered = "true";
+};
+
+const renderQueuedGoogleButtons = () => {
+  if (!state.googleIdentityReady || !window.google?.accounts?.id) return;
+  googleButtonQueue.forEach((_value, target) => {
+    if (!document.body.contains(target)) {
+      googleButtonQueue.delete(target);
+      return;
+    }
+    renderGoogleButton(target);
+    googleButtonQueue.delete(target);
+  });
+};
+
+const ensureGoogleIdentity = () => {
+  if (state.googleIdentityReady) return;
+  if (!state.config?.googleClientId) return;
+  if (window.google?.accounts?.id) {
+    initGoogleIdentity();
+    return;
+  }
+  loadGoogleScript();
+};
+
+const queueGoogleButton = (target) => {
+  if (!target || target.dataset.googleQueued === "true") return;
+  target.dataset.googleQueued = "true";
+  googleButtonQueue.set(target, true);
+  ensureGoogleIdentity();
+  renderQueuedGoogleButtons();
+};
+
 const loadGoogleScript = () => {
   if (document.getElementById("google-identity")) return;
   const script = document.createElement("script");
@@ -4509,6 +4560,7 @@ const loadGoogleScript = () => {
 };
 
 const initGoogleIdentity = () => {
+  if (state.googleIdentityReady) return;
   if (!state.config?.googleClientId || !window.google?.accounts?.id) return;
   window.google.accounts.id.initialize({
     client_id: state.config.googleClientId,
@@ -4516,11 +4568,8 @@ const initGoogleIdentity = () => {
     use_fedcm_for_prompt: !isLocalhost(),
     ux_mode: "popup"
   });
-};
-
-const promptGoogleLogin = () => {
-  if (!window.google?.accounts?.id) return;
-  window.google.accounts.id.prompt();
+  state.googleIdentityReady = true;
+  renderQueuedGoogleButtons();
 };
 
 const isLocalhost = () => {
@@ -4685,11 +4734,27 @@ const loadRazorpay = () => {
   });
 };
 
+const showGoogleLoginOverlay = ({ title, message }) => {
+  const overlay = document.createElement("div");
+  overlay.className = "fixed inset-0 bg-black/70 flex items-center justify-center z-50";
+  overlay.innerHTML = `
+    <div class="max-w-md w-full bg-white text-ink rounded-3xl p-8 border border-slate-200">
+      <h3 class="font-display text-2xl">${title}</h3>
+      <p class="mt-3 text-slate-600">${message}</p>
+      <div class="mt-6 flex justify-center" id="overlay-google-login" data-google-size="large"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const loginSlot = overlay.querySelector("#overlay-google-login");
+  if (!loginSlot) return;
+  loginSlot.textContent = "Continue with Google";
+  queueGoogleButton(loginSlot);
+};
+
 const showLoginGate = () => {
-  showOverlay({
+  showGoogleLoginOverlay({
     title: "Continue reading",
-    message: "Sign in with Google to unlock the full post.",
-    primary: { text: "Continue with Google", action: promptGoogleLogin }
+    message: "Sign in with Google to unlock the full post."
   });
 };
 
