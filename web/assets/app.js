@@ -11,7 +11,9 @@ const state = {
   tool: null,
   toolUsage: null,
   toolConfig: null,
-  googleIdentityReady: false
+  googleIdentityReady: false,
+  googlePromptPending: false,
+  googlePromptIntent: null
 };
 
 const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia
@@ -2718,9 +2720,10 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
   const requireSignIn = Boolean(freeRules.require_sign_in);
   if (requireSignIn && !state.user) {
     stageContainer.classList.add("pointer-events-none", "opacity-70");
-    showGoogleLoginOverlay({
+    showOverlay({
       title: "Sign in required",
-      message: "Sign in to use Career Copilot and save your progress."
+      message: "Sign in to use Career Copilot and save your progress.",
+      primary: { text: "Continue with Google", action: promptGoogleLogin }
     });
   }
 
@@ -3004,9 +3007,10 @@ const initCareerCopilotFlow = ({ slug, config, usageState, entitlementActive }) 
   if (analyzeBtn) {
     analyzeBtn.addEventListener("click", async () => {
       if (!state.user && requireSignIn) {
-        showGoogleLoginOverlay({
+        showOverlay({
           title: "Sign in required",
-          message: "Continue with Google to upload your resume."
+          message: "Continue with Google to upload your resume.",
+          primary: { text: "Continue with Google", action: promptGoogleLogin }
         });
         return;
       }
@@ -3511,9 +3515,10 @@ const initChatFlow = (session, freeRules) => {
 
   const sendMessage = async () => {
     if (!state.user && freeRules.require_sign_in) {
-      showGoogleLoginOverlay({
+      showOverlay({
         title: "Sign in required",
-        message: "Continue with Google to keep chatting."
+        message: "Continue with Google to keep chatting.",
+        primary: { text: "Continue with Google", action: promptGoogleLogin }
       });
       return;
     }
@@ -3680,9 +3685,10 @@ const initChatFlow = (session, freeRules) => {
 
   const startMic = async () => {
     if (!state.user && freeRules.require_sign_in) {
-      showGoogleLoginOverlay({
+      showOverlay({
         title: "Sign in required",
-        message: "Sign in to use voice input."
+        message: "Sign in to use voice input.",
+        primary: { text: "Continue with Google", action: promptGoogleLogin }
       });
       return;
     }
@@ -4402,19 +4408,18 @@ const formatPercent = (value) => {
 };
 
 const initLoginButtons = () => {
-  const loginTargets = [selectors.navLogin(), selectors.ctaLogin()].filter(Boolean);
-  if (loginTargets.length === 0) return;
+  const loginButtons = [selectors.navLogin(), selectors.ctaLogin()].filter(Boolean);
+  if (loginButtons.length === 0) return;
 
-  if (!state.config?.googleClientId) {
-    loginTargets.forEach((target) => {
-      target.textContent = "Continue with Google";
+  loginButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      promptGoogleLogin();
     });
-    return;
-  }
-
-  loginTargets.forEach((target) => {
-    queueGoogleButton(target);
   });
+
+  if (state.config?.googleClientId) {
+    loadGoogleScript();
+  }
 };
 
 const initSearchOverlay = () => {
@@ -4548,6 +4553,61 @@ const queueGoogleButton = (target) => {
   renderQueuedGoogleButtons();
 };
 
+const runGooglePrompt = () => {
+  if (!state.googleIdentityReady || !window.google?.accounts?.id) return;
+  if (!state.googlePromptPending) return;
+  state.googlePromptPending = false;
+  window.google.accounts.id.prompt(handleGooglePromptMoment);
+};
+
+const promptGoogleLogin = () => {
+  if (!state.config?.googleClientId) {
+    showToast("Google login is not configured yet.");
+    return;
+  }
+  state.googlePromptIntent = "user";
+  state.googlePromptPending = true;
+  ensureGoogleIdentity();
+  runGooglePrompt();
+};
+
+const shouldShowGooglePopupFallback = (notification) => {
+  if (!notification) return false;
+  if (notification.isNotDisplayed?.()) return true;
+  if (notification.isSkippedMoment?.()) return true;
+  return false;
+};
+
+const handleGooglePromptMoment = (notification) => {
+  if (state.googlePromptIntent !== "user") return;
+  if (shouldShowGooglePopupFallback(notification)) {
+    showGooglePopupFallback();
+  }
+  state.googlePromptIntent = null;
+};
+
+const showGooglePopupFallback = () => {
+  if (document.getElementById("google-login-fallback")) return;
+  const overlay = document.createElement("div");
+  overlay.id = "google-login-fallback";
+  overlay.className = "fixed inset-0 bg-black/70 flex items-center justify-center z-50";
+  overlay.innerHTML = `
+    <div class="max-w-md w-full bg-white text-ink rounded-3xl p-8 border border-slate-200">
+      <h3 class="font-display text-2xl">Continue with Google</h3>
+      <p class="mt-3 text-slate-600">Google hid the inline account chooser. Use the sign-in button below to continue.</p>
+      <div class="mt-6 flex justify-center" id="google-login-fallback-button" data-google-size="large"></div>
+      <button class="mt-5 text-slate-500" id="google-login-fallback-close">Close</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const loginSlot = overlay.querySelector("#google-login-fallback-button");
+  if (loginSlot) {
+    loginSlot.textContent = "Continue with Google";
+    queueGoogleButton(loginSlot);
+  }
+  overlay.querySelector("#google-login-fallback-close").addEventListener("click", () => overlay.remove());
+};
+
 const loadGoogleScript = () => {
   if (document.getElementById("google-identity")) return;
   const script = document.createElement("script");
@@ -4570,6 +4630,7 @@ const initGoogleIdentity = () => {
   });
   state.googleIdentityReady = true;
   renderQueuedGoogleButtons();
+  runGooglePrompt();
 };
 
 const isLocalhost = () => {
@@ -4734,27 +4795,11 @@ const loadRazorpay = () => {
   });
 };
 
-const showGoogleLoginOverlay = ({ title, message }) => {
-  const overlay = document.createElement("div");
-  overlay.className = "fixed inset-0 bg-black/70 flex items-center justify-center z-50";
-  overlay.innerHTML = `
-    <div class="max-w-md w-full bg-white text-ink rounded-3xl p-8 border border-slate-200">
-      <h3 class="font-display text-2xl">${title}</h3>
-      <p class="mt-3 text-slate-600">${message}</p>
-      <div class="mt-6 flex justify-center" id="overlay-google-login" data-google-size="large"></div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  const loginSlot = overlay.querySelector("#overlay-google-login");
-  if (!loginSlot) return;
-  loginSlot.textContent = "Continue with Google";
-  queueGoogleButton(loginSlot);
-};
-
 const showLoginGate = () => {
-  showGoogleLoginOverlay({
+  showOverlay({
     title: "Continue reading",
-    message: "Sign in with Google to unlock the full post."
+    message: "Sign in with Google to unlock the full post.",
+    primary: { text: "Continue with Google", action: promptGoogleLogin }
   });
 };
 
