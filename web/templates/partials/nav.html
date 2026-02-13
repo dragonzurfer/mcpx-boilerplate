@@ -15,9 +15,30 @@
     <a href="/admin" class="hover:text-ink hidden" data-admin-link>Admin</a>
   </nav>
   <div class="flex items-center gap-3">
+    <button id="nav-mobile-toggle" class="md:hidden px-3 py-2 rounded-full border border-slate-200 text-slate-600 hover:border-primary/60" aria-expanded="false" aria-controls="nav-mobile-panel">
+      <span class="sr-only">Toggle menu</span>
+      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" data-menu-icon="open">
+        <path d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+      <svg class="h-5 w-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" data-menu-icon="close">
+        <path d="M6 6l12 12M18 6l-12 12" />
+      </svg>
+    </button>
     <button id="nav-search" class="px-3 py-2 rounded-full border border-slate-200 text-slate-600 hover:border-primary/60">Search</button>
     <button id="nav-login" class="px-4 py-2 rounded-full bg-primary text-white font-semibold">Continue with Google</button>
     <button id="nav-logout" class="hidden px-4 py-2 rounded-full border border-slate-200 text-slate-700 hover:border-primary/60">Sign out</button>
   </div>
 </header>
+<div class="md:hidden hidden" id="nav-mobile-panel">
+  <div class="mt-4 rounded-3xl border border-slate-200 bg-white/90 p-5 text-slate-600">
+    <nav class="flex flex-col gap-3 text-sm">
+      <a href="/" class="hover:text-ink" data-nav-link="/">Newsletters</a>
+      <a href="/tools" class="hover:text-ink" data-nav-link="/tools">Tools</a>
+      <a href="/courses" class="hover:text-ink" data-nav-link="/courses">Courses</a>
+      <a href="/pricing" class="hover:text-ink" data-nav-link="/pricing">Pricing</a>
+      <a href="/account" class="hover:text-ink hidden" data-auth-link>Account</a>
+      <a href="/admin" class="hover:text-ink hidden" data-admin-link>Admin</a>
+    </nav>
+  </div>
+</div>
 {{ end }}

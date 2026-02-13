@@ -67,6 +67,7 @@ const init = async () => {
   state.config = await configPromise;
   updateNavState();
   initNavActions();
+  initMobileNav();
   highlightNav();
   initLoginButtons();
   initSearchOverlay();
@@ -3892,10 +3893,10 @@ const updateNavState = () => {
     logoutBtn.classList.toggle("hidden", !isSignedIn);
   }
 
-  const accountLink = document.getElementById("nav-account");
-  if (accountLink) {
-    accountLink.classList.toggle("hidden", !isSignedIn);
-  }
+  document.querySelectorAll("[data-auth-link]").forEach((link) => {
+    if (!link) return;
+    link.classList.toggle("hidden", !isSignedIn);
+  });
 
   const ctaSection = document.getElementById("cta-login-section");
   if (ctaSection) {
@@ -3918,6 +3919,41 @@ const initNavActions = () => {
       window.location.reload();
     });
   }
+};
+
+const initMobileNav = () => {
+  const toggleBtn = document.getElementById("nav-mobile-toggle");
+  const panel = document.getElementById("nav-mobile-panel");
+  if (!toggleBtn || !panel) return;
+
+  const openIcon = toggleBtn.querySelector("[data-menu-icon=\"open\"]");
+  const closeIcon = toggleBtn.querySelector("[data-menu-icon=\"close\"]");
+
+  const setExpanded = (isOpen) => {
+    panel.classList.toggle("hidden", !isOpen);
+    toggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    if (openIcon) openIcon.classList.toggle("hidden", isOpen);
+    if (closeIcon) closeIcon.classList.toggle("hidden", !isOpen);
+  };
+
+  const closeMenu = () => {
+    setExpanded(false);
+  };
+
+  toggleBtn.addEventListener("click", () => {
+    const isOpen = panel.classList.contains("hidden");
+    setExpanded(isOpen);
+  });
+
+  panel.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", closeMenu);
+  });
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth >= 768) {
+      closeMenu();
+    }
+  });
 };
 
 const highlightNav = () => {

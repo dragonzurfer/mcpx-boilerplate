@@ -16,7 +16,7 @@ Server-rendered HTML templates for Explore, including shared partials and the Ca
 - `pricing.html`: pricing page with a dedicated loading state (`pricing-loader`), a hidden plans grid (`pricing-cards`) revealed after plans load, and value-focused copy that explains monthly vs yearly use cases.
 - `admin_tools.html`: admin controls for tool gating + tracking.
 - `admin_courses.html`: admin course builder for structured metadata, modules, and lesson editing/reordering.
-- `partials/`: shared navigation and admin nav fragments (see `web/templates/partials/docs.md`).
+- `partials/`: shared navigation and admin nav fragments (see `web/templates/partials/docs.md` for the mobile hamburger menu details).
 
 ## Notes
 

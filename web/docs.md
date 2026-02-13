@@ -6,7 +6,7 @@ Server-rendered HTML templates + static assets for Explore.
 
 ## Structure
 
-- `templates/`: SSR templates (layout + page content, including tools + courses + account + admin pages and shared navigation, plus post analytics, admin tools controls, and admin course builder; post detail uses a centered reading column while course detail uses a module sidebar + lesson viewer).
+- `templates/`: SSR templates (layout + page content, including tools + courses + account + admin pages and shared navigation with a mobile hamburger menu, plus post analytics, admin tools controls, and admin course builder; post detail uses a centered reading column while course detail uses a module sidebar + lesson viewer).
 - `templates/layout.html` injects CSS variables for theme (primary color + off-white) from site settings.
 - Admin templates include inline helper copy for funnel and settings pages.
 - Admin promos template includes field-level guidance and multi-variant support (add/remove variants).
