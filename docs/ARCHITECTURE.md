@@ -9,7 +9,7 @@ Explore is a self-hosted newsletter + courses platform with:
 - Public / Trial / Paid access levels
 - Engagement-based funnel scoring
 - Promo decision engine (trial-only)
-- Daily post analytics rollup (unique impressions + engagement aggregates)
+- Daily post analytics rollup (unique impressions + engagement aggregates) with same-day raw overlays for real-time admin views
 - Manual Razorpay renewals (no auto-renew)
 - SEO-first rendering (OG, JSON-LD, sitemap, RSS)
 - Guided tools with per-user usage limits (Career Copilot) using Gemini for resume analysis, mentor responses, chat replies, and voice transcription, with focus-stage path previews across all focus/subfocus routes
@@ -47,7 +47,7 @@ HTTP -> Logger/Recovery
 - **PaymentService**: Razorpay order + webhook verification, entitlement updates.
 - **ToolService**: tool usage gating (free limits, stage completion, event logging).
 - **SEO**: meta builder, OG image generation, sitemap/robots/RSS.
-- **Admin analytics UI**: dashboard pulls funnel + promo metrics from `/api/admin/analytics/*` and per-post analytics from `/api/admin/analytics/posts/*`.
+- **Admin analytics UI**: dashboard pulls funnel + promo metrics from `/api/admin/analytics/*` and per-post analytics from `/api/admin/analytics/posts/*` (rollups + same-day raw overlay).
 
 ## Data model (high level)
 

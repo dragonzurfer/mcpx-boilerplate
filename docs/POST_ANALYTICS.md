@@ -43,6 +43,18 @@ Runs every 24 hours:
 3. Cleanup raw rows older than retention window:
    - `events`, `post_impressions`, `promo_impressions`, `promo_clicks`
 
+## Real-time overlay (today)
+
+Admin post analytics endpoints read from rollups **plus** same-day raw rows when the
+requested range includes the current UTC day:
+
+- `events` (post_open, post_complete, scroll_depth, time_on_page)
+- `post_impressions`
+- `promo_impressions`, `promo_clicks`
+
+If a rollup row already exists for today, the raw overlay is skipped to avoid double counting.
+Caching is bypassed for ranges that include today.
+
 ## Retention
 
 Retention is derived from the **funnel scoring window**:

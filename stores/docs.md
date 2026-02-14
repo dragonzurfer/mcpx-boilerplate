@@ -27,7 +27,7 @@ GORM models and persistence helpers for Explore.
 - Event batch ingest, anon merge, and daily post impression de-dup
 - Funnel config + metrics upsert (weights/stages auto-seeded with defaults on first read)
 - Promo metrics + impression/click logging
-- Post analytics rollup (daily aggregation + retention cleanup)
+- Post analytics rollup (daily aggregation + retention cleanup) plus same-day raw overlays for real-time admin views
 - Tool catalog seeding, per-user usage state, and tool event logging
 - Tool daily rollups and tool-event retention cleanup
 - Payment/entitlement upsert and expiry
