@@ -8,6 +8,7 @@ GORM models and persistence helpers for Explore.
 
 - `users`, `oauth_identities`
 - `posts`, `tags`, `post_tags`
+- `problems`
 - `courses`, `course_modules`, `course_lessons`
 - `events`
 - `post_impressions`, `post_daily_metrics`, `post_promo_daily_metrics`
@@ -23,6 +24,7 @@ GORM models and persistence helpers for Explore.
 - MySQL connection pool tuning is applied during `NewStore` (`max open/idle`, idle timeout, lifetime) to reduce connection churn.
 - User lookup + upsert with OAuth identity
 - Post/course CRUD + HTML cache update
+- Problem CRUD with JSON statement, IO spec, constraints, tags, and editorial helpers
 - Course metadata JSON helpers (`ParseCourseMetadata` / `SerializeCourseMetadata`) and course/module/lesson CRUD + reorder helpers (metadata module/lesson counts are synced automatically when structure changes)
 - Event batch ingest, anon merge, and daily post impression de-dup
 - Funnel config + metrics upsert (weights/stages auto-seeded with defaults on first read)

@@ -31,10 +31,12 @@ func LoadTemplates() (map[string]*template.Template, error) {
 		"tool":                 filepath.Join("web", "templates", "tool.html"),
 		"courses":              filepath.Join("web", "templates", "courses.html"),
 		"course":               filepath.Join("web", "templates", "course.html"),
+		"practice":             filepath.Join("web", "templates", "practice.html"),
 		"account":              filepath.Join("web", "templates", "account.html"),
 		"admin_dashboard":      filepath.Join("web", "templates", "admin_dashboard.html"),
 		"admin_posts":          filepath.Join("web", "templates", "admin_posts.html"),
 		"admin_courses":        filepath.Join("web", "templates", "admin_courses.html"),
+		"admin_problems":       filepath.Join("web", "templates", "admin_problems.html"),
 		"admin_post_analytics": filepath.Join("web", "templates", "admin_post_analytics.html"),
 		"admin_funnel":         filepath.Join("web", "templates", "admin_funnel.html"),
 		"admin_promos":         filepath.Join("web", "templates", "admin_promos.html"),
@@ -63,10 +65,12 @@ func (h *PageHandler) Register(r *gin.Engine) {
 	r.GET("/tools/:slug", h.tool)
 	r.GET("/courses", h.courses)
 	r.GET("/course/:slug", h.course)
+	r.GET("/practice", h.practice)
 	r.GET("/account", h.account)
 	r.GET("/admin", h.adminDashboard)
 	r.GET("/admin/posts", h.adminPosts)
 	r.GET("/admin/courses", h.adminCourses)
+	r.GET("/admin/problems", h.adminProblems)
 	r.GET("/admin/posts/:id/analytics", h.adminPostAnalytics)
 	r.GET("/admin/funnel", h.adminFunnel)
 	r.GET("/admin/promos", h.adminPromos)
@@ -183,6 +187,20 @@ func (h *PageHandler) courses(c *gin.Context) {
 	h.renderTemplate(c, "courses", data)
 }
 
+func (h *PageHandler) practice(c *gin.Context) {
+	settings := h.resolveSiteSettings()
+	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
+	meta.Title = "Practice | " + meta.SiteName
+	meta.Description = "Practice coding problems with curated datasets and clear difficulty tags."
+	if settings.SiteURL != "" {
+		meta.CanonicalURL = settings.SiteURL + "/practice"
+	}
+	meta.JSONLD = ""
+
+	data := pageData{Meta: meta, JSONLD: template.JS(""), Theme: resolveTheme(settings)}
+	h.renderTemplate(c, "practice", data)
+}
+
 func (h *PageHandler) course(c *gin.Context) {
 	slug := strings.TrimSpace(c.Param("slug"))
 	if slug == "" {
@@ -287,6 +305,20 @@ func (h *PageHandler) adminCourses(c *gin.Context) {
 	meta.Robots = "noindex,nofollow"
 	data := pageData{Meta: meta, JSONLD: template.JS(meta.JSONLD), Theme: resolveTheme(settings)}
 	h.renderTemplate(c, "admin_courses", data)
+}
+
+func (h *PageHandler) adminProblems(c *gin.Context) {
+	settings := h.resolveSiteSettings()
+	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
+	meta.Title = "Admin Problems | " + meta.SiteName
+	meta.Description = "Admin problem editor for coding practice content."
+	meta.Robots = "noindex,nofollow"
+	if settings.SiteURL != "" {
+		meta.CanonicalURL = settings.SiteURL + "/admin/problems"
+	}
+
+	data := pageData{Meta: meta, JSONLD: template.JS(meta.JSONLD), Theme: resolveTheme(settings)}
+	h.renderTemplate(c, "admin_problems", data)
 }
 
 func (h *PageHandler) adminPostAnalytics(c *gin.Context) {

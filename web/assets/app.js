@@ -28,6 +28,8 @@ const selectors = {
   toolsLoader: () => document.getElementById("tools-loader"),
   pricingLoader: () => document.getElementById("pricing-loader"),
   coursesGrid: () => document.getElementById("courses-grid"),
+  problemsLoader: () => document.getElementById("problems-loader"),
+  problemsGrid: () => document.getElementById("problems-grid"),
   toolsGrid: () => document.getElementById("tools-grid"),
   pricingCards: () => document.getElementById("pricing-cards"),
   postBody: () => document.getElementById("post-body"),
@@ -43,6 +45,7 @@ const API = {
   authLogin: "/api/auth/login",
   posts: "/api/posts",
   courses: "/api/courses",
+  problems: "/api/problems",
   tools: "/api/tools",
   promos: "/api/promos",
   events: "/api/events/batch",
@@ -98,6 +101,9 @@ const renderPageForRoute = async (page) => {
   if (page === "course") {
     await renderCourse();
   }
+  if (page === "practice") {
+    await renderPractice();
+  }
   if (page === "tools") {
     await renderTools();
   }
@@ -118,6 +124,9 @@ const renderPageForRoute = async (page) => {
   }
   if (page === "admin-courses") {
     await renderAdminCourses();
+  }
+  if (page === "admin-problems") {
+    await renderAdminProblems();
   }
   if (page === "admin-funnel") {
     await renderAdminFunnel();
@@ -313,6 +322,33 @@ const renderCourses = async () => {
   } catch (err) {
     console.error(err);
     grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load courses right now. Please refresh and try again.</p>";
+    setVisibility(grid, true);
+  } finally {
+    setVisibility(loader, false);
+  }
+};
+
+const renderPractice = async () => {
+  const grid = selectors.problemsGrid();
+  const loader = selectors.problemsLoader();
+  if (!grid) return;
+
+  setVisibility(loader, true);
+  setVisibility(grid, false);
+
+  try {
+    const data = await fetchJSON(API.problems, { headers: authHeader() });
+    const items = data.items || [];
+    if (items.length === 0) {
+      grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600\">No problems are available right now.</p>";
+    } else {
+      grid.innerHTML = items.map(renderProblemCard).join("");
+    }
+    setVisibility(grid, true);
+    animateIn(grid.children);
+  } catch (err) {
+    console.error(err);
+    grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load problems right now. Please refresh and try again.</p>";
     setVisibility(grid, true);
   } finally {
     setVisibility(loader, false);
@@ -926,6 +962,201 @@ const renderAdminPosts = async () => {
   };
 
   await loadPosts();
+};
+
+const renderAdminProblems = async () => {
+  const errorEl = document.getElementById("admin-problems-error");
+  clearError(errorEl);
+  if (!requireAdmin(errorEl)) return;
+
+  const table = document.getElementById("problems-table");
+  const queryInput = document.getElementById("problems-query");
+  const statusSelect = document.getElementById("problems-status");
+  const difficultySelect = document.getElementById("problems-difficulty");
+  const refreshBtn = document.getElementById("problems-refresh");
+
+  const editorTitle = document.getElementById("problem-editor-title");
+  const editorForm = document.getElementById("problem-editor");
+  const resetBtn = document.getElementById("problem-reset");
+
+  const resetEditor = () => {
+    if (editorForm) editorForm.reset();
+    document.getElementById("problem-id").value = "";
+    document.getElementById("problem-difficulty").value = "EASY";
+    document.getElementById("problem-status").value = "DRAFT";
+    document.getElementById("problem-examples").value = "[]";
+    document.getElementById("problem-io-spec").value = "{}";
+    document.getElementById("problem-constraints").value = "{}";
+    document.getElementById("problem-official-solutions").value = "[]";
+    if (editorTitle) editorTitle.textContent = "New problem";
+  };
+
+  const renderRow = (problem) => {
+    const updatedAt = formatDate(problem.updated_at);
+    return `
+      <tr>
+        <td class="py-4 text-slate-800">${problem.title}</td>
+        <td class="py-4 text-slate-600">${problem.difficulty}</td>
+        <td class="py-4 text-slate-600">${problem.status}</td>
+        <td class="py-4 text-slate-600">${updatedAt}</td>
+        <td class="py-4 text-right">
+          <button class="text-primary" data-edit-problem="${problem.id}">Edit</button>
+          <button class="ml-3 text-rose-600" data-delete-problem="${problem.id}">Delete</button>
+        </td>
+      </tr>
+    `;
+  };
+
+  const loadProblems = async () => {
+    if (!table) return;
+    try {
+      clearError(errorEl);
+      const params = new URLSearchParams();
+      if (queryInput?.value) params.set("q", queryInput.value.trim());
+      if (statusSelect?.value) params.set("status", statusSelect.value);
+      if (difficultySelect?.value) params.set("difficulty", difficultySelect.value);
+      const data = await fetchJSON(`/api/admin/problems?${params.toString()}`);
+      const items = data.items || [];
+      if (items.length === 0) {
+        table.innerHTML = "<tr><td class=\"py-4 text-slate-500\" colspan=\"5\">No problems found.</td></tr>";
+        return;
+      }
+      table.innerHTML = items.map(renderRow).join("");
+
+      table.querySelectorAll("[data-edit-problem]").forEach((button) => {
+        button.addEventListener("click", () => loadProblemDetail(button.dataset.editProblem));
+      });
+      table.querySelectorAll("[data-delete-problem]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const problemID = button.dataset.deleteProblem;
+          if (!problemID) return;
+          if (!confirm("Delete this problem?")) return;
+          await fetchJSON(`/api/admin/problems/${problemID}`, { method: "DELETE" });
+          showToast("Problem deleted");
+          resetEditor();
+          await loadProblems();
+        });
+      });
+    } catch (err) {
+      setError(errorEl, err.message || "Failed to load problems.");
+    }
+  };
+
+  const loadProblemDetail = async (problemID) => {
+    if (!problemID) return;
+    try {
+      clearError(errorEl);
+      const data = await fetchJSON(`/api/admin/problems/${problemID}`);
+      const problem = data.problem || {};
+      const statement = problem.statement || {};
+      const editorial = problem.editorial || {};
+      document.getElementById("problem-id").value = problem.id || "";
+      document.getElementById("problem-title").value = problem.title || "";
+      document.getElementById("problem-slug").value = problem.slug || "";
+      document.getElementById("problem-difficulty").value = problem.difficulty || "EASY";
+      document.getElementById("problem-status").value = problem.status || "DRAFT";
+      document.getElementById("problem-published").value = formatDate(problem.published_at);
+      document.getElementById("problem-tags").value = (problem.tags || []).join(", ");
+      document.getElementById("problem-statement").value = statement.markdown || "";
+      document.getElementById("problem-examples").value = formatJSON(statement.examples, "[]");
+      document.getElementById("problem-notes").value = (statement.notes || []).join(", ");
+      document.getElementById("problem-io-spec").value = formatJSON(problem.io_spec, "{}");
+      document.getElementById("problem-constraints").value = formatJSON(problem.constraints, "{}");
+      document.getElementById("problem-editorial").value = editorial.markdown || "";
+      document.getElementById("problem-hints").value = (editorial.hints || []).join(", ");
+      document.getElementById("problem-official-solutions").value = formatJSON(problem.official_solutions, "[]");
+      if (editorTitle) editorTitle.textContent = `Editing: ${problem.title || "Problem"}`;
+    } catch (err) {
+      setError(errorEl, err.message || "Failed to load problem details.");
+    }
+  };
+
+  const parseJSONField = (value, label, fallback) => {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return { value: fallback, error: null };
+    try {
+      return { value: JSON.parse(trimmed), error: null };
+    } catch (err) {
+      return { value: null, error: `${label} must be valid JSON.` };
+    }
+  };
+
+  const buildProblemPayload = () => {
+    const examplesResult = parseJSONField(document.getElementById("problem-examples").value, "Examples", []);
+    if (examplesResult.error) return { error: examplesResult.error };
+    const ioSpecResult = parseJSONField(document.getElementById("problem-io-spec").value, "IO spec", {});
+    if (ioSpecResult.error) return { error: ioSpecResult.error };
+    const constraintsResult = parseJSONField(document.getElementById("problem-constraints").value, "Constraints", {});
+    if (constraintsResult.error) return { error: constraintsResult.error };
+    const solutionsResult = parseJSONField(document.getElementById("problem-official-solutions").value, "Official solutions", []);
+    if (solutionsResult.error) return { error: solutionsResult.error };
+
+    const publishedRaw = document.getElementById("problem-published").value;
+    return {
+      payload: {
+        slug: document.getElementById("problem-slug").value.trim(),
+        title: document.getElementById("problem-title").value.trim(),
+        difficulty: document.getElementById("problem-difficulty").value,
+        status: document.getElementById("problem-status").value,
+        statement: {
+          markdown: document.getElementById("problem-statement").value.trim(),
+          examples: examplesResult.value,
+          notes: splitTags(document.getElementById("problem-notes").value)
+        },
+        io_spec: ioSpecResult.value,
+        constraints: constraintsResult.value,
+        tags: splitTags(document.getElementById("problem-tags").value),
+        editorial: {
+          markdown: document.getElementById("problem-editorial").value.trim(),
+          hints: splitTags(document.getElementById("problem-hints").value)
+        },
+        official_solutions: solutionsResult.value,
+        published_at: toISODate(publishedRaw)
+      },
+      error: null
+    };
+  };
+
+  if (refreshBtn) refreshBtn.addEventListener("click", loadProblems);
+  if (queryInput) queryInput.addEventListener("change", loadProblems);
+  if (statusSelect) statusSelect.addEventListener("change", loadProblems);
+  if (difficultySelect) difficultySelect.addEventListener("change", loadProblems);
+  if (resetBtn) resetBtn.addEventListener("click", resetEditor);
+
+  if (editorForm) {
+    editorForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError(errorEl);
+      const result = buildProblemPayload();
+      if (result.error) {
+        setError(errorEl, result.error);
+        return;
+      }
+      const payload = result.payload;
+      const validationError = validateProblemPayload(payload);
+      if (validationError) {
+        setError(errorEl, validationError);
+        return;
+      }
+      try {
+        const problemID = document.getElementById("problem-id").value;
+        const method = problemID ? "PUT" : "POST";
+        const url = problemID ? `/api/admin/problems/${problemID}` : "/api/admin/problems";
+        await fetchJSON(url, {
+          method,
+          body: JSON.stringify(payload)
+        });
+        showToast("Problem saved");
+        resetEditor();
+        await loadProblems();
+      } catch (err) {
+        setError(errorEl, err.message || "Failed to save problem.");
+      }
+    });
+  }
+
+  resetEditor();
+  await loadProblems();
 };
 
 const renderAdminCourses = async () => {
@@ -2207,6 +2438,22 @@ const renderCourseCard = (course) => {
       </div>
       <div class="mt-5 rounded-full bg-ember text-white text-center py-2 font-semibold">Open Course</div>
     </a>
+  `;
+};
+
+const renderProblemCard = (problem) => {
+  const tags = Array.isArray(problem.tags) ? problem.tags : [];
+  const difficulty = problem.difficulty || "EASY";
+  return `
+    <div class="rounded-3xl border border-slate-200/60 bg-white/90 p-6 flex flex-col">
+      <div class="text-xs uppercase tracking-wide text-slate-500">${difficulty}</div>
+      <h3 class="mt-3 font-display text-xl text-ink">${problem.title || "Problem"}</h3>
+      <p class="mt-2 text-slate-600 text-sm">${problem.slug || ""}</p>
+      <div class="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
+        ${tags.slice(0, 4).map((tag) => `<span class="rounded-full border border-slate-200 px-2 py-1">${tag}</span>`).join("")}
+      </div>
+      <div class="mt-5 rounded-full bg-slate-100 text-slate-600 text-center py-2 font-semibold">Practice coming soon</div>
+    </div>
   `;
 };
 
@@ -3968,7 +4215,8 @@ const highlightNav = () => {
   document.querySelectorAll("[data-admin-nav]").forEach((link) => {
     if (!link) return;
     const target = link.getAttribute("data-admin-nav");
-    const isActive = target === "/admin/posts" ? path.startsWith("/admin/posts") : path === target;
+    const isDetailRoute = target === "/admin/posts" || target === "/admin/problems";
+    const isActive = isDetailRoute ? path.startsWith(target) : path === target;
     link.classList.toggle("text-ink", isActive);
     link.classList.toggle("border-primary/60", isActive);
   });
@@ -4021,6 +4269,15 @@ const validatePostPayload = (payload) => {
   if (!payload.body_markdown) return "Post body is required.";
   if (!payload.access_level) return "Access level is required.";
   if (!payload.status) return "Status is required.";
+  return null;
+};
+
+const validateProblemPayload = (payload) => {
+  if (!payload.slug) return "Problem slug is required.";
+  if (!payload.title) return "Problem title is required.";
+  if (!payload.difficulty) return "Problem difficulty is required.";
+  if (!payload.status) return "Problem status is required.";
+  if (!payload.statement?.markdown) return "Problem statement markdown is required.";
   return null;
 };
 
@@ -4124,6 +4381,15 @@ const safeJSONParse = (value) => {
   } catch (err) {
     console.error(err);
     return null;
+  }
+};
+
+const formatJSON = (value, fallback) => {
+  if (value === undefined || value === null) return fallback;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (err) {
+    return fallback;
   }
 };
 

@@ -1,0 +1,20 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="practice">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-4xl">
+      <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Practice</p>
+      <h1 class="mt-3 font-display text-3xl lg:text-5xl text-ink">Problem library</h1>
+      <p class="mt-4 text-slate-600 text-lg">Sharpen your skills with curated problems, clear difficulty tags, and focused practice sessions.</p>
+    </section>
+
+    <div id="problems-loader" class="mt-10 flex justify-center items-center h-40">
+      <div class="animate-spin h-6 w-6 rounded-full border-2 border-slate-300 border-t-transparent"></div>
+      <p class="ml-4 text-lg text-slate-600">Loading problems...</p>
+    </div>
+
+    <section class="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-3 hidden" id="problems-grid" hidden></section>
+  </main>
+</div>
+{{ end }}

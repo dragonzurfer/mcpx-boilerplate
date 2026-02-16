@@ -97,6 +97,9 @@ func main() {
 	coursesHandler := &routes.CoursesHandler{Service: contentService}
 	coursesHandler.Register(api)
 
+	problemsHandler := &routes.ProblemsHandler{Store: store}
+	problemsHandler.Register(api)
+
 	eventsHandler := &routes.EventsHandler{Store: store}
 	eventsHandler.Register(api)
 
@@ -130,6 +133,9 @@ func main() {
 
 	adminCourses := &routes.AdminCoursesHandler{Store: store}
 	adminCourses.Register(admin)
+
+	adminProblems := &routes.AdminProblemsHandler{Store: store}
+	adminProblems.Register(admin)
 
 	adminFunnel := &routes.AdminFunnelHandler{Store: store}
 	adminFunnel.Register(admin)

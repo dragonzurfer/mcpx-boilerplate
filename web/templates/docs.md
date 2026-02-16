@@ -13,9 +13,11 @@ Server-rendered HTML templates for Explore, including shared partials and the Ca
 - `tools.html`: tools catalog listing with a dedicated loading state (`tools-loader`) and a hidden grid (`tools-grid`) revealed after data loads.
 - `courses.html`: course catalog page with loading state (`courses-loader`) and card grid (`courses-grid`).
 - `course.html`: course learning layout with sidebar roadmap (`course-modules-sidebar`) and lesson content viewer (`course-body`).
+- `practice.html`: practice problems catalog with loader (`problems-loader`) and grid (`problems-grid`).
 - `pricing.html`: pricing page with a dedicated loading state (`pricing-loader`), a hidden plans grid (`pricing-cards`) revealed after plans load, and value-focused copy that explains monthly vs yearly use cases.
 - `admin_tools.html`: admin controls for tool gating + tracking.
 - `admin_courses.html`: admin course builder for structured metadata, modules, and lesson editing/reordering.
+- `admin_problems.html`: admin problem manager for CRUD on practice problems, JSON specs, and editorial content.
 - `partials/`: shared navigation and admin nav fragments (see `web/templates/partials/docs.md` for the mobile hamburger menu details).
 
 ## Notes

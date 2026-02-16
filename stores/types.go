@@ -21,8 +21,20 @@ const (
 )
 
 const (
-	UserRoleUser      = "USER"
-	UserRoleAdmin     = "ADMIN"
+	ProblemDifficultyEasy   = "EASY"
+	ProblemDifficultyMedium = "MEDIUM"
+	ProblemDifficultyHard   = "HARD"
+)
+
+const (
+	ProblemStatusDraft     = "DRAFT"
+	ProblemStatusPublished = "PUBLISHED"
+	ProblemStatusArchived  = "ARCHIVED"
+)
+
+const (
+	UserRoleUser       = "USER"
+	UserRoleAdmin      = "ADMIN"
 	UserRoleSuperAdmin = "SUPER_ADMIN"
 )
 
@@ -55,11 +67,11 @@ const (
 )
 
 const (
-	FunnelStageNew        = "NEW"
-	FunnelStageCasual     = "CASUAL"
-	FunnelStageEngaged    = "ENGAGED"
-	FunnelStageHot        = "HOT"
-	FunnelStagePaidActive = "PAID_ACTIVE"
+	FunnelStageNew         = "NEW"
+	FunnelStageCasual      = "CASUAL"
+	FunnelStageEngaged     = "ENGAGED"
+	FunnelStageHot         = "HOT"
+	FunnelStagePaidActive  = "PAID_ACTIVE"
 	FunnelStagePaidExpired = "PAID_EXPIRED"
-	FunnelStageDormant    = "DORMANT"
+	FunnelStageDormant     = "DORMANT"
 )

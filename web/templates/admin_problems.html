@@ -1,0 +1,88 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="admin-problems">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-4xl">
+      <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Problems</p>
+      <h1 class="mt-3 font-display text-3xl lg:text-5xl text-ink">Problem manager</h1>
+      <p class="mt-4 text-slate-600 text-lg">Create, update, and publish coding problems with clear difficulty, constraints, and editorial notes.</p>
+    </section>
+
+    {{ template "admin_nav" . }}
+
+    <div id="admin-problems-error" class="hidden mt-8 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-700"></div>
+
+    <section class="mt-10 grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
+      <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <div class="flex flex-wrap items-center gap-3">
+          <input id="problems-query" placeholder="Search problems" class="flex-1 rounded-full bg-white border border-slate-200 px-4 py-2 text-slate-700" />
+          <select id="problems-status" class="rounded-full bg-white border border-slate-200 px-4 py-2 text-slate-700">
+            <option value="">All statuses</option>
+            <option value="PUBLISHED">Published</option>
+            <option value="DRAFT">Draft</option>
+            <option value="ARCHIVED">Archived</option>
+          </select>
+          <select id="problems-difficulty" class="rounded-full bg-white border border-slate-200 px-4 py-2 text-slate-700">
+            <option value="">All difficulties</option>
+            <option value="EASY">Easy</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="HARD">Hard</option>
+          </select>
+          <button id="problems-refresh" class="px-4 py-2 rounded-full border border-slate-200 text-slate-700">Refresh</button>
+        </div>
+        <div class="mt-6 overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th class="py-3">Title</th>
+                <th class="py-3">Difficulty</th>
+                <th class="py-3">Status</th>
+                <th class="py-3">Updated</th>
+                <th class="py-3"></th>
+              </tr>
+            </thead>
+            <tbody id="problems-table" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Editor</p>
+        <h2 class="mt-3 font-display text-2xl text-ink" id="problem-editor-title">New problem</h2>
+        <form id="problem-editor" class="mt-6 space-y-4">
+          <input type="hidden" id="problem-id" />
+          <input id="problem-title" placeholder="Title" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="problem-slug" placeholder="Slug" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <div class="grid gap-3 md:grid-cols-2">
+            <select id="problem-difficulty" class="rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700">
+              <option value="EASY">EASY</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="HARD">HARD</option>
+            </select>
+            <select id="problem-status" class="rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700">
+              <option value="DRAFT">DRAFT</option>
+              <option value="PUBLISHED">PUBLISHED</option>
+              <option value="ARCHIVED">ARCHIVED</option>
+            </select>
+          </div>
+          <input id="problem-published" placeholder="Published at (YYYY-MM-DD)" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <input id="problem-tags" placeholder="Tags (comma separated)" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <textarea id="problem-statement" rows="6" placeholder="Statement markdown" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+          <textarea id="problem-examples" rows="4" placeholder="Examples JSON" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+          <input id="problem-notes" placeholder="Notes (comma separated)" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <textarea id="problem-io-spec" rows="4" placeholder="IO spec JSON" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+          <textarea id="problem-constraints" rows="4" placeholder="Constraints JSON" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+          <textarea id="problem-editorial" rows="4" placeholder="Editorial markdown" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+          <input id="problem-hints" placeholder="Hints (comma separated)" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700" />
+          <textarea id="problem-official-solutions" rows="4" placeholder="Official solutions JSON" class="w-full rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-700"></textarea>
+          <div class="flex flex-wrap gap-3">
+            <button type="submit" class="flex-1 rounded-full bg-primary text-white py-3 font-semibold">Save</button>
+            <button type="button" id="problem-reset" class="flex-1 rounded-full border border-slate-200 text-slate-700 py-3">Reset</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+{{ end }}

@@ -32,6 +32,7 @@ func NewStore(dsn string) (*Store, error) {
 		&PostModel{},
 		&TagModel{},
 		&PostTagModel{},
+		&ProblemModel{},
 		&CourseModel{},
 		&CourseModuleModel{},
 		&CourseLessonModel{},
