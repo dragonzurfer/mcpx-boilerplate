@@ -33,6 +33,65 @@ const (
 )
 
 const (
+	DatasetTypePublic = "PUBLIC"
+	DatasetTypeHidden = "HIDDEN"
+)
+
+const (
+	ScoringModeBinary  = "BINARY"
+	ScoringModePartial = "PARTIAL"
+)
+
+const (
+	SubmissionModeRun    = "RUN"
+	SubmissionModeSubmit = "SUBMIT"
+)
+
+const (
+	SubmissionStatusQueued    = "QUEUED"
+	SubmissionStatusRunning   = "RUNNING"
+	SubmissionStatusCompleted = "COMPLETED"
+	SubmissionStatusFailed    = "FAILED"
+)
+
+const (
+	VerdictAccepted            = "AC"
+	VerdictWrongAnswer         = "WRONG_ANSWER"
+	VerdictTLE                 = "TLE"
+	VerdictMLE                 = "MLE"
+	VerdictRuntimeError        = "RUNTIME_ERROR"
+	VerdictCompileError        = "COMPILE_ERROR"
+	VerdictOutputLimitExceeded = "OUTPUT_LIMIT_EXCEEDED"
+	VerdictInternalError       = "INTERNAL_ERROR"
+	VerdictSkipped             = "SKIPPED"
+)
+
+const (
+	ValidatorTypeExact          = "EXACT"
+	ValidatorTypeJSONEquiv      = "JSON_EQUIV"
+	ValidatorTypeUnorderedEquiv = "UNORDERED_EQUIV"
+	ValidatorTypeFloatTolerance = "FLOAT_TOLERANCE"
+	ValidatorTypeCustomChecker  = "CUSTOM_CHECKER"
+)
+
+const (
+	TestcaseVisibilityPublic = "PUBLIC"
+	TestcaseVisibilityHidden = "HIDDEN"
+)
+
+const (
+	TestcaseGroupEdge   = "EDGE"
+	TestcaseGroupNormal = "NORMAL"
+	TestcaseGroupStress = "STRESS"
+)
+
+const (
+	ExecutionOrderFastFirst   = "FAST_FIRST"
+	ExecutionArtifactsMinimal = "MINIMAL"
+	ExecutionArtifactsFull    = "FULL"
+)
+
+const (
 	UserRoleUser       = "USER"
 	UserRoleAdmin      = "ADMIN"
 	UserRoleSuperAdmin = "SUPER_ADMIN"

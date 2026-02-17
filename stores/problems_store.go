@@ -188,6 +188,42 @@ func (s *Store) DeleteProblem(input ProblemDeleteInput) error {
 	return s.db.Delete(&ProblemModel{}, input.ProblemID).Error
 }
 
+type ProblemStatusUpdateInput struct {
+	ProblemID   uint
+	Status      string
+	PublishedAt *time.Time
+}
+
+func (s *Store) UpdateProblemStatus(input ProblemStatusUpdateInput) (*ProblemModel, error) {
+	if input.ProblemID == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	problemModel := ProblemModel{}
+	if err := s.db.Where("id = ?", input.ProblemID).First(&problemModel).Error; err != nil {
+		return nil, err
+	}
+
+	updates := map[string]interface{}{}
+	if strings.TrimSpace(input.Status) != "" {
+		updates["status"] = normalizeProblemStatus(input.Status)
+	}
+	if input.PublishedAt != nil {
+		updates["published_at"] = input.PublishedAt
+	}
+
+	if len(updates) == 0 {
+		return &problemModel, nil
+	}
+
+	updates["updated_at"] = time.Now().UTC()
+	if err := s.db.Model(&problemModel).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	return &problemModel, nil
+}
+
 func normalizeProblemCreateInput(input ProblemCreateInput) (ProblemCreateInput, error) {
 	normalizedCore, err := normalizeProblemCoreInput(input.ProblemCoreInput)
 	if err != nil {

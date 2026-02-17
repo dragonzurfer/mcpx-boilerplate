@@ -6,7 +6,8 @@ Explore is a self-hosted newsletter + courses platform with:
 
 - Markdown content with Vimeo embeds (sanitized HTML)
 - Course catalog with structured metadata JSON, module/lesson hierarchy, and per-lesson free/paid access flags
-- Practice problem library with admin-managed IO specs, constraints, and editorials
+- Practice problem library with admin-managed IO specs, constraints, datasets/testcases, and editorials
+- Practice submissions with queued judge execution, results storage, and optional AI coaching
 - Public / Trial / Paid access levels
 - Engagement-based funnel scoring
 - Promo decision engine (trial-only)
@@ -32,12 +33,18 @@ HTTP -> Logger/Recovery
         -> /api/* (authed): Auth -> RateLimiter
             -> /api/me
             -> /api/courses/:slug, /api/courses/:slug/lessons/:lessonSlug
+            -> /api/submissions, /api/submissions/:id, /api/submissions/:id/result
+            -> /api/users/:id/problems/:problem_id/history
+            -> /api/ai-analysis, /api/ai-analysis/verify
             -> /api/tools/:slug/action
             -> /api/tools/:slug/resume, /mentor, /chat, /transcribe
             -> /api/payments/create-order, /confirm
         -> /api/admin/*: Auth -> RequireAdminRole
             -> /api/admin/courses (course metadata + module/lesson CRUD/reorder)
             -> /api/admin/problems (problem CRUD with JSON specs)
+            -> /api/admin/problems/:id/publish
+            -> /api/admin/problems/:id/datasets, /api/admin/datasets/:id/testcases
+            -> /api/admin/problems/:id/solutions
             -> /api/admin/tools (tool gating + tracking settings)
 ```
 
@@ -49,6 +56,9 @@ HTTP -> Logger/Recovery
 - **PromoService**: decision engine (trial-only, caps/cooldowns).
 - **PaymentService**: Razorpay order + webhook verification, entitlement updates.
 - **ToolService**: tool usage gating (free limits, stage completion, event logging).
+- **JudgeService**: claims queued submissions, runs tests, stores results, issues signed receipts.
+- **LocalRunner**: compiles/runs Go/C/C++/Java submissions locally (STDIN-only, no sandbox).
+- **AIAnalysisService**: on-demand coaching feedback with cached responses + receipt verification.
 - **SEO**: meta builder, OG image generation, sitemap/robots/RSS.
 - **Admin analytics UI**: dashboard pulls funnel + promo metrics from `/api/admin/analytics/*` and per-post analytics from `/api/admin/analytics/posts/*` (rollups + same-day raw overlay).
 
@@ -56,7 +66,8 @@ HTTP -> Logger/Recovery
 
 - `users`, `oauth_identities`
 - `posts`, `tags`, `post_tags`
-- `problems`
+- `problems`, `datasets`, `testcases`, `solutions`
+- `submissions`, `submission_results`, `ai_analyses`
 - `courses` (includes `metadata_json`, `thumbnail_url`, `description`), `course_modules`, `course_lessons` (`is_free` for lesson gating)
 - `events`, `post_impressions`, `post_daily_metrics`, `post_promo_daily_metrics`, `user_metrics`
 - `funnel_config`, `funnel_event_weights`, `funnel_stage_thresholds`
@@ -100,3 +111,8 @@ HTTP -> Logger/Recovery
 - Server-side templates with OG tags, Twitter cards, canonical, JSON-LD.
 - `/robots.txt`, `/sitemap.xml` (PUBLIC posts only), `/rss.xml`.
 - OG images served via `/og/post/:slug` and `/og/course/:slug`.
+
+## Practice judge notes
+
+- Judge worker polls the submission queue on a fixed interval and processes one submission at a time.
+- Current runner supports STDIN mode only and executes locally without sandbox isolation; plan for a hardened sandbox runner before untrusted traffic.

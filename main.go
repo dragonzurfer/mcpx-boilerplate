@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,6 +57,12 @@ func main() {
 
 	contentService := &services.ContentService{Store: store}
 	funnelService := &services.FunnelService{Store: store, Logger: logger}
+	analysisService := &services.AIAnalysisService{Store: store, AI: geminiClient, Logger: logger}
+	judgeService := &services.JudgeService{
+		Store:  store,
+		Runner: &services.LocalRunner{WorkDir: getEnv("JUDGE_WORKDIR", "")},
+		Logger: logger,
+	}
 
 	templates, err := routes.LoadTemplates()
 	if err != nil {
@@ -124,6 +131,12 @@ func main() {
 	meHandler.Register(authed)
 	paymentsHandler.RegisterAuthed(authed)
 
+	submissionsHandler := &routes.SubmissionsHandler{Store: store}
+	submissionsHandler.Register(authed)
+
+	analysisHandler := &routes.AIAnalysisHandler{Service: analysisService}
+	analysisHandler.Register(authed)
+
 	admin := api.Group("/admin")
 	admin.Use(middleware.Auth(store, logger))
 	admin.Use(middleware.RequireAdminRole())
@@ -136,6 +149,12 @@ func main() {
 
 	adminProblems := &routes.AdminProblemsHandler{Store: store}
 	adminProblems.Register(admin)
+
+	adminProblemDatasets := &routes.AdminProblemDatasetsHandler{Store: store}
+	adminProblemDatasets.Register(admin)
+
+	adminProblemSolutions := &routes.AdminProblemSolutionsHandler{Store: store}
+	adminProblemSolutions.Register(admin)
 
 	adminFunnel := &routes.AdminFunnelHandler{Store: store}
 	adminFunnel.Register(admin)
@@ -158,7 +177,12 @@ func main() {
 	adminSettings := &routes.AdminSettingsHandler{Store: store}
 	adminSettings.Register(admin)
 
-	startBackgroundJobs(store, funnelService, logger)
+	startBackgroundJobs(backgroundJobsInput{
+		Store:         store,
+		FunnelService: funnelService,
+		JudgeService:  judgeService,
+		Logger:        logger,
+	})
 
 	port := getEnv("APP_PORT", "8080")
 	logger.Printf("info [main]: starting server on :%s", port)
@@ -167,55 +191,152 @@ func main() {
 	}
 }
 
-func startBackgroundJobs(store *stores.Store, funnelService *services.FunnelService, logger *log.Logger) {
+type backgroundJobsInput struct {
+	Store         *stores.Store
+	FunnelService *services.FunnelService
+	JudgeService  *services.JudgeService
+	Logger        *log.Logger
+}
+
+func startBackgroundJobs(input backgroundJobsInput) {
+	startFunnelRecalcJob(funnelJobInput{Service: input.FunnelService, Logger: input.Logger})
+	startEntitlementExpiryJob(entitlementJobInput{Store: input.Store, Logger: input.Logger})
+	startPostAnalyticsJob(analyticsJobInput{Store: input.Store, Logger: input.Logger})
+	startToolAnalyticsJob(analyticsJobInput{Store: input.Store, Logger: input.Logger})
+	startJudgeWorker(judgeWorkerInput{
+		Service:  input.JudgeService,
+		Logger:   input.Logger,
+		Interval: judgePollInterval(),
+	})
+}
+
+type funnelJobInput struct {
+	Service *services.FunnelService
+	Logger  *log.Logger
+}
+
+func startFunnelRecalcJob(input funnelJobInput) {
+	if input.Service == nil || input.Logger == nil {
+		return
+	}
+
 	go func() {
 		interval := 60 * time.Minute
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+
 		for {
 			now := time.Now().UTC()
-			if err := funnelService.RecalculateAll(now); err != nil {
-				logger.Printf("error [funnel]: %v", err)
+			if err := input.Service.RecalculateAll(now); err != nil {
+				input.Logger.Printf("error [funnel]: %v", err)
 			}
 			<-ticker.C
 		}
 	}()
+}
+
+type entitlementJobInput struct {
+	Store  *stores.Store
+	Logger *log.Logger
+}
+
+func startEntitlementExpiryJob(input entitlementJobInput) {
+	if input.Store == nil || input.Logger == nil {
+		return
+	}
 
 	go func() {
 		interval := 24 * time.Hour
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+
 		for {
 			now := time.Now().UTC()
-			if err := store.ExpireEntitlements(now); err != nil {
-				logger.Printf("error [entitlements]: %v", err)
+			if err := input.Store.ExpireEntitlements(now); err != nil {
+				input.Logger.Printf("error [entitlements]: %v", err)
 			}
 			<-ticker.C
 		}
 	}()
+}
+
+type analyticsJobInput struct {
+	Store  *stores.Store
+	Logger *log.Logger
+}
+
+func startPostAnalyticsJob(input analyticsJobInput) {
+	if input.Store == nil || input.Logger == nil {
+		return
+	}
 
 	go func() {
 		interval := 24 * time.Hour
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+
 		for {
 			now := time.Now().UTC()
-			if err := runPostAnalyticsRollup(store, now); err != nil {
-				logger.Printf("error [analytics]: %v", err)
+			if err := runPostAnalyticsRollup(input.Store, now); err != nil {
+				input.Logger.Printf("error [analytics]: %v", err)
 			}
 			<-ticker.C
 		}
 	}()
+}
+
+func startToolAnalyticsJob(input analyticsJobInput) {
+	if input.Store == nil || input.Logger == nil {
+		return
+	}
 
 	go func() {
 		interval := 24 * time.Hour
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+
 		for {
 			now := time.Now().UTC()
-			if err := runToolAnalyticsRollup(store, now); err != nil {
-				logger.Printf("error [tool_analytics]: %v", err)
+			if err := runToolAnalyticsRollup(input.Store, now); err != nil {
+				input.Logger.Printf("error [tool_analytics]: %v", err)
 			}
+			<-ticker.C
+		}
+	}()
+}
+
+type judgeWorkerInput struct {
+	Service  *services.JudgeService
+	Logger   *log.Logger
+	Interval time.Duration
+}
+
+func startJudgeWorker(input judgeWorkerInput) {
+	if input.Service == nil || input.Logger == nil {
+		return
+	}
+
+	interval := input.Interval
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			processed, err := input.Service.RunOnce()
+			if err != nil {
+				input.Logger.Printf("error [judge]: %v", err)
+				<-ticker.C
+				continue
+			}
+
+			if processed {
+				continue
+			}
+
 			<-ticker.C
 		}
 	}()
@@ -232,6 +353,18 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func judgePollInterval() time.Duration {
+	raw := strings.TrimSpace(getEnv("JUDGE_POLL_INTERVAL_MS", "1000"))
+	ms, err := strconv.Atoi(raw)
+	if err != nil || ms <= 0 {
+		return 2 * time.Second
+	}
+	if ms < 200 {
+		ms = 200
+	}
+	return time.Duration(ms) * time.Millisecond
 }
 
 func isProduction() bool {

@@ -49,6 +49,27 @@ brew install go
 
 ---
 
+## 2.1 golangci-lint (Go linting)
+
+Install the linter used by the backend pre-commit hook.
+
+### macOS
+```bash
+brew install golangci-lint
+```
+
+### Windows
+```powershell
+choco install golangci-lint
+```
+
+### Linux
+```bash
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.61.0
+```
+
+---
+
 ## 3. Google Cloud SDK (gcloud)
 
 ### macOS

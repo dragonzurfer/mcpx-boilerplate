@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Business logic for Explore: content rendering, funnel scoring, promo decisions, payments, and SEO utilities.
+Business logic for Explore: content rendering, funnel scoring, promo decisions, payments, SEO utilities, and practice-judge orchestration (including submissions, results, and AI coaching).
 
 ## Files
 
@@ -21,6 +21,16 @@ Business logic for Explore: content rendering, funnel scoring, promo decisions, 
 - `payment_service_test.go`: entitlement logic tests.
 - `tool_service.go`: tool usage gating (free limits, stage completion) + event logging.
 - `gemini_service.go`: Gemini client for resume analysis, mentor response, markdown chat replies, and audio transcription, with resilient JSON extraction across multi-part/candidate model responses.
+- `gemini_practice.go`: Gemini prompt execution + JSON parsing for practice analysis.
+- `ai_analysis_service.go`: AI analysis orchestration with caching, receipts verification, and fallback summaries.
+- `analysis_id.go`: analysis ID generation helpers.
+- `hash.go`: SHA-256 hashing helper used for receipts + analysis caching.
+- `judge_types.go`: core judge/result/runner structs shared across judge pipeline.
+- `judge_service.go`: judge orchestrator (claims queue, runs tests, stores results, issues receipts).
+- `runner_local.go`: local compiler/runner for Go/C/C++/Java using STDIN only.
+- `limits.go`: resolves execution limits from problem constraints + per-language overrides.
+- `validator.go`: output validators (exact/JSON/unordered/float-tolerance).
+- `receipt.go`: signed receipt generation + verification.
 
 ## Notes
 
@@ -28,3 +38,4 @@ Business logic for Explore: content rendering, funnel scoring, promo decisions, 
 - Promo decisions are **trial-only** and never shown to paid users.
 - Funnel jobs fall back to default weights/stages (sourced from store defaults) when no admin overrides exist.
 - Post analytics rollups run daily (see `docs/POST_ANALYTICS.md`).
+- Practice judge currently executes STDIN-mode problems only and runs locally (no sandbox). Hidden test details are hashed before persistence.

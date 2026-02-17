@@ -9,6 +9,8 @@ GORM models and persistence helpers for Explore.
 - `users`, `oauth_identities`
 - `posts`, `tags`, `post_tags`
 - `problems`
+- `datasets`, `testcases`, `solutions`
+- `submissions`, `submission_results`, `ai_analyses`
 - `courses`, `course_modules`, `course_lessons`
 - `events`
 - `post_impressions`, `post_daily_metrics`, `post_promo_daily_metrics`
@@ -25,6 +27,9 @@ GORM models and persistence helpers for Explore.
 - User lookup + upsert with OAuth identity
 - Post/course CRUD + HTML cache update
 - Problem CRUD with JSON statement, IO spec, constraints, tags, and editorial helpers
+- Dataset/testcase CRUD with execution policy + validator defaults
+- Submission queueing (claim next) + result persistence
+- AI analysis caching (fingerprint lookup + response storage)
 - Course metadata JSON helpers (`ParseCourseMetadata` / `SerializeCourseMetadata`) and course/module/lesson CRUD + reorder helpers (metadata module/lesson counts are synced automatically when structure changes)
 - Event batch ingest, anon merge, and daily post impression de-dup
 - Funnel config + metrics upsert (weights/stages auto-seeded with defaults on first read)

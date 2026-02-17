@@ -12,7 +12,9 @@ HTTP handlers for public, authenticated, and admin APIs plus server-rendered pag
 - `me.go`: `/api/me` profile + stage + entitlement.
 - `posts.go`: public post listing + detail (gated by access level).
 - `courses.go`: public course listing plus signed-in course detail/lesson APIs (module + lesson structure with per-lesson lock checks).
-- `problems.go`: public practice-problem listing (published-only) with difficulty and tags.
+- `problems.go`: public practice-problem listing (published-only) with difficulty, tags, and problem detail (statement + IO spec + constraints + public datasets).
+- `submissions.go`: submission create/status/result/history endpoints for practice runs and submits.
+- `ai_analysis.go`: AI analysis endpoints (`/ai-analysis`, `/ai-analysis/verify`) for coaching feedback.
 - `tools.go`: tools catalog + per-tool action tracking (signed-in required for actions), plus resume upload + mentor/chat + voice transcription endpoints.
 - `admin_tools.go`: tool admin settings (limits, gating, tracking).
 - `events.go`: event batch ingest.
@@ -23,6 +25,8 @@ HTTP handlers for public, authenticated, and admin APIs plus server-rendered pag
 - `admin_posts.go`: admin CRUD for posts (tag de-duplication to avoid duplicate post_tags).
 - `admin_courses.go`: admin CRUD for courses, metadata, modules, lessons, and module/lesson reordering.
 - `admin_problems.go`: admin CRUD for practice problems, including IO spec + constraints JSON and editorial content.
+- `admin_problem_datasets.go`: admin dataset/testcase CRUD plus publish endpoint.
+- `admin_problem_solutions.go`: admin CRUD for official solutions table.
 - `admin_funnel.go`: funnel config, weights, stages.
 - `admin_promos.go`: promos + variants with validation, duplicate-code handling, and promo detail fetch (includes variants).
 - `admin_analytics.go`: basic funnel/promo/content analytics.
