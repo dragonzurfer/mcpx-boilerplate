@@ -5510,27 +5510,37 @@ const refreshLucide = () => {
 
 const formatInlineMarkdown = (value) => {
   let text = value;
-  const mathTokens = [];
-  const mathTokenForIndex = (index) => `@@MATHTOKEN${index}@@`;
+  const inlineTokens = [];
+  const inlineTokenForIndex = (index) => `@@INLINETOKEN${index}@@`;
+  const storeInlineToken = (html) => {
+    const tokenIndex = inlineTokens.push(html) - 1;
+    return inlineTokenForIndex(tokenIndex);
+  };
+
+  text = text.replace(/`([^`]+)`/g, (_, code) => {
+    return storeInlineToken(`<code class="markdown-inline-code">${code}</code>`);
+  });
 
   text = text.replace(/\$\$([^$]+)\$\$/g, (_, expression) => {
-    const tokenIndex = mathTokens.push(renderInlineMath(expression)) - 1;
-    return mathTokenForIndex(tokenIndex);
+    return storeInlineToken(renderInlineMath(expression));
   });
 
   text = text.replace(/\$([^$\n]+)\$/g, (_, expression) => {
-    const tokenIndex = mathTokens.push(renderInlineMath(expression)) - 1;
-    return mathTokenForIndex(tokenIndex);
+    return storeInlineToken(renderInlineMath(expression));
   });
 
+  text = text.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^\s)]+)\)/g, (_, label, href) => {
+    const isExternalLink = /^https?:\/\//.test(href);
+    const externalAttrs = isExternalLink ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "";
+    return `<a href="${href}"${externalAttrs}>${label}</a>`;
+  });
   text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   text = text.replace(/__(.+?)__/g, "<strong>$1</strong>");
   text = text.replace(/\*(.+?)\*/g, "<em>$1</em>");
   text = text.replace(/_(.+?)_/g, "<em>$1</em>");
-  text = text.replace(/`([^`]+)`/g, "<code class=\"rounded bg-slate-100 px-1\">$1</code>");
 
-  mathTokens.forEach((mathHTML, index) => {
-    text = text.split(mathTokenForIndex(index)).join(mathHTML);
+  inlineTokens.forEach((inlineHTML, index) => {
+    text = text.split(inlineTokenForIndex(index)).join(inlineHTML);
   });
 
   return text;
@@ -5569,35 +5579,68 @@ const markdownHeadingTag = (level) => {
 };
 
 const markdownHeadingClass = (level) => {
-  if (level <= 1) return "mt-4 text-2xl font-semibold text-ink";
-  if (level === 2) return "mt-4 text-xl font-semibold text-ink";
-  if (level === 3) return "mt-3 text-lg font-semibold text-ink";
-  if (level === 4) return "mt-3 text-base font-semibold text-ink";
-  return "mt-2 text-sm font-semibold text-ink";
+  if (level <= 1) return "markdown-heading markdown-heading-1";
+  if (level === 2) return "markdown-heading markdown-heading-2";
+  if (level === 3) return "markdown-heading markdown-heading-3";
+  if (level === 4) return "markdown-heading markdown-heading-4";
+  return "markdown-heading markdown-heading-5";
+};
+
+const closeMarkdownParagraph = (state) => {
+  if (state.paragraphLines.length === 0) return "";
+
+  const paragraphText = state.paragraphLines.join(" ").trim();
+  state.paragraphLines = [];
+  if (!paragraphText) return "";
+
+  return `<p class="markdown-paragraph">${formatInlineMarkdown(paragraphText)}</p>`;
+};
+
+const closeMarkdownList = (state) => {
+  if (!state.listType) return "";
+
+  const closingTag = state.listType;
+  state.listType = "";
+  return `</${closingTag}>`;
+};
+
+const closeMarkdownQuote = (state) => {
+  if (state.quoteLines.length === 0) return "";
+
+  const quoteText = state.quoteLines.join(" ").trim();
+  state.quoteLines = [];
+  if (!quoteText) return "";
+
+  return `<blockquote><p>${formatInlineMarkdown(quoteText)}</p></blockquote>`;
+};
+
+const closeMarkdownBlocks = (state) => {
+  return closeMarkdownParagraph(state) + closeMarkdownList(state) + closeMarkdownQuote(state);
 };
 
 const renderMarkdownToHTML = (markdown) => {
   const raw = escapeHTML(markdown);
   const lines = raw.split("\n");
   let html = "";
-  let inList = false;
+  const state = {
+    listType: "",
+    paragraphLines: [],
+    quoteLines: []
+  };
   let inCode = false;
 
   lines.forEach((line) => {
     const trimmed = line.trim();
     const fenceMatch = trimmed.match(/^```([^\s`]*)?\s*$/);
     if (fenceMatch) {
-      if (inList) {
-        html += "</ul>";
-        inList = false;
-      }
+      html += closeMarkdownBlocks(state);
 
       if (!inCode) {
         const codeLanguage = normalizeMarkdownCodeLanguage(fenceMatch[1] || "");
         const languageClass = codeLanguage ? ` language-${codeLanguage}` : "";
         const languageAttribute = codeLanguage ? ` data-code-language="${codeLanguage}"` : "";
         inCode = true;
-        html += `<pre class="mt-3 overflow-x-auto rounded-2xl bg-slate-900 p-4 text-slate-100"><code class="hljs${languageClass}"${languageAttribute}>`;
+        html += `<pre class="markdown-code"><code class="hljs${languageClass}"${languageAttribute}>`;
       } else {
         inCode = false;
         html += "</code></pre>";
@@ -5610,28 +5653,30 @@ const renderMarkdownToHTML = (markdown) => {
       return;
     }
 
-    const bulletMatch = trimmed.match(/^[-*]\s+(.*)$/);
-    if (bulletMatch) {
-      if (!inList) {
-        inList = true;
-        html += "<ul class=\"mt-2 list-disc list-inside text-slate-600\">";
-      }
-      html += `<li>${formatInlineMarkdown(bulletMatch[1])}</li>`;
+    if (trimmed === "") {
+      html += closeMarkdownBlocks(state);
       return;
     }
 
-    if (inList) {
-      html += "</ul>";
-      inList = false;
+    const quoteMatch = trimmed.match(/^>\s?(.*)$/);
+    if (quoteMatch) {
+      html += closeMarkdownParagraph(state) + closeMarkdownList(state);
+      state.quoteLines.push(quoteMatch[1]);
+      return;
     }
 
-    if (trimmed === "") {
-      html += "<br />";
+    html += closeMarkdownQuote(state);
+
+    const horizontalRuleMatch = trimmed.match(/^([-*_])(?:\s*\1){2,}$/);
+    if (horizontalRuleMatch) {
+      html += closeMarkdownParagraph(state) + closeMarkdownList(state);
+      html += "<hr />";
       return;
     }
 
     const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
+      html += closeMarkdownParagraph(state) + closeMarkdownList(state);
       const headingLevel = headingMatch[1].length;
       const headingTag = markdownHeadingTag(headingLevel);
       const headingClass = markdownHeadingClass(headingLevel);
@@ -5640,12 +5685,29 @@ const renderMarkdownToHTML = (markdown) => {
       return;
     }
 
-    html += `<p class="text-slate-600">${formatInlineMarkdown(trimmed)}</p>`;
+    const unorderedListMatch = trimmed.match(/^[-*+]\s+(.*)$/);
+    const orderedListMatch = trimmed.match(/^\d+[.)]\s+(.*)$/);
+    if (unorderedListMatch || orderedListMatch) {
+      html += closeMarkdownParagraph(state);
+      const nextListType = orderedListMatch ? "ol" : "ul";
+      if (state.listType && state.listType !== nextListType) {
+        html += closeMarkdownList(state);
+      }
+      if (!state.listType) {
+        state.listType = nextListType;
+        html += `<${nextListType} class="markdown-list">`;
+      }
+
+      const listText = unorderedListMatch ? unorderedListMatch[1] : orderedListMatch[1];
+      html += `<li>${formatInlineMarkdown(listText)}</li>`;
+      return;
+    }
+
+    html += closeMarkdownList(state);
+    state.paragraphLines.push(trimmed);
   });
 
-  if (inList) {
-    html += "</ul>";
-  }
+  html += closeMarkdownBlocks(state);
   if (inCode) {
     html += "</code></pre>";
   }

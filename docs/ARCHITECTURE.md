@@ -59,7 +59,7 @@ HTTP -> Logger/Recovery
 
 ## Core services
 
-- **ContentService**: fetch posts/courses, render markdown → HTML, enforce access gating.
+- **ContentService**: fetch posts/courses, render sanitized GFM markdown → HTML, enforce access gating.
 - **EventService**: batch ingest events with anon/user IDs + daily unique post impressions.
 - **FunnelService**: compute score + stage, periodic recalculation job.
 - **PromoService**: decision engine (trial-only, caps/cooldowns).

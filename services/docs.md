@@ -8,8 +8,8 @@ Business logic for Explore: content rendering, funnel scoring, promo decisions, 
 
 - `content_service.go`: post/course access rules, teaser rendering, HTML caching.
 - `content_service_test.go`: unit tests for gate decisions and teaser extraction.
-- `markdown_renderer.go`: Markdown → HTML with Vimeo embeds + sanitization.
-- `markdown_renderer_test.go`: embed + sanitization tests.
+- `markdown_renderer.go`: GFM Markdown → sanitized HTML with Vimeo embeds.
+- `markdown_renderer_test.go`: embed, GFM, and sanitization tests.
 - `seo_builder.go`: deterministic meta builder (OG/Twitter/JSON-LD), with course description fallback support for both `description` and legacy `excerpt`.
 - `seo_builder_test.go`: meta rules tests.
 - `funnel_service.go`: scoring + stage derivation (canonicalizes legacy post event names and includes post/course/practice activity events).

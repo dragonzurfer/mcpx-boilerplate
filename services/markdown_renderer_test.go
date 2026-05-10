@@ -27,6 +27,22 @@ func TestRenderMarkdownEmbedsVimeoShortcode(t *testing.T) {
 	}
 }
 
+func TestRenderMarkdownSupportsGFM(t *testing.T) {
+	input := MarkdownRenderInput{Markdown: "| Topic | Status |\n| --- | --- |\n| Resume | ~~draft~~ ready |"}
+	output, err := RenderMarkdown(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(output.HTML, "<table>") {
+		t.Fatalf("expected table markup, got %q", output.HTML)
+	}
+
+	if !strings.Contains(output.HTML, "<del>draft</del>") {
+		t.Fatalf("expected strikethrough markup, got %q", output.HTML)
+	}
+}
+
 func TestRenderMarkdownSanitizesIframes(t *testing.T) {
 	input := MarkdownRenderInput{Markdown: "<iframe src=\"https://evil.com\"></iframe>"}
 	output, err := RenderMarkdown(input)
