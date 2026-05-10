@@ -2,7 +2,7 @@
 <div class="min-h-screen reader-page" data-page="course" data-course-slug="{{ .Course.Slug }}">
   {{ template "nav" . }}
 
-  <main class="reader-main px-6 lg:px-16 pb-24">
+  <main class="reader-main course-reader-main pb-24">
     <section class="reader-hero max-w-4xl">
       <h1 class="font-display text-4xl lg:text-6xl text-ink" id="course-title">{{ .Course.Title }}</h1>
       <p class="mt-4 text-slate-600" id="course-description">{{ .Course.Excerpt }}</p>
