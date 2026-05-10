@@ -127,11 +127,11 @@ textarea {
 }
 
 .course-reader-grid {
-  max-width: 1120px;
+  max-width: 1480px;
   margin-left: auto;
   margin-right: auto;
-  justify-content: center;
   align-items: start;
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
 }
 
 .course-roadmap {
@@ -150,9 +150,8 @@ textarea {
 }
 
 .course-lesson-shell {
-  width: 100%;
-  max-width: 860px;
-  justify-self: center;
+  max-width: none;
+  justify-self: stretch;
   border-color: #e6e6e6;
   border-radius: 16px;
   background: #ffffff;
@@ -161,15 +160,15 @@ textarea {
 
 .course-lesson-header,
 .course-lesson-shell .medium-prose {
-  max-width: 720px;
+  max-width: 760px;
   margin-left: auto;
   margin-right: auto;
 }
 
 #course-body.medium-prose,
 #post-body.medium-prose {
-  width: min(100%, 720px);
-  max-width: 720px !important;
+  width: min(100%, 760px);
+  max-width: 760px !important;
   margin-left: auto !important;
   margin-right: auto !important;
 }
@@ -181,6 +180,68 @@ textarea {
 .course-lesson-header h2 {
   font-weight: 700;
   letter-spacing: -0.035em;
+}
+
+.course-toc-shell {
+  align-self: start;
+  position: sticky;
+  top: 6rem;
+  padding-left: 1.1rem;
+  border-left: 1px solid #e6e6e6;
+  max-height: calc(100vh - 7.5rem);
+  overflow-y: auto;
+}
+
+.course-toc-kicker {
+  font-family: "Libre Franklin", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.course-toc-link {
+  display: block;
+  color: #4b5563;
+  text-decoration: none;
+  font-family: "Libre Franklin", sans-serif;
+  font-size: 1rem;
+  line-height: 1.45;
+  padding: 0.28rem 0;
+  transition: color 0.15s ease;
+}
+
+.course-toc-link:hover {
+  color: #242424;
+}
+
+.course-toc-link.level-3 {
+  padding-left: 0.85rem;
+  font-size: 0.94rem;
+}
+
+.course-toc-link.level-4 {
+  padding-left: 1.4rem;
+  font-size: 0.9rem;
+}
+
+.course-toc-link.is-active {
+  color: #111827;
+  font-weight: 600;
+}
+
+.course-toc-empty {
+  font-family: "Libre Franklin", sans-serif;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+@media (min-width: 1280px) {
+  .course-reader-grid {
+    column-gap: 1.8rem;
+    grid-template-columns: minmax(240px, 280px) minmax(0, 860px) minmax(210px, 270px);
+  }
 }
 
 .site-body .rounded-3xl:not(.rounded-full) {

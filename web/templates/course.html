@@ -8,7 +8,7 @@
       <p class="mt-4 text-slate-600" id="course-description">{{ .Course.Excerpt }}</p>
     </section>
 
-    <section class="course-reader-grid mt-10 grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+    <section class="course-reader-grid mt-10 grid gap-6">
       <aside class="course-roadmap rounded-3xl border border-slate-200 bg-white/85 p-5 h-fit lg:sticky lg:top-24">
         <div class="flex items-center justify-between gap-3">
           <p class="text-xs uppercase tracking-wide text-slate-500">Course roadmap</p>
@@ -27,6 +27,11 @@
           {{ .ContentHTML }}
         </section>
       </article>
+
+      <aside class="course-toc-shell hidden xl:block" id="course-toc-shell">
+        <p class="course-toc-kicker">Table of contents</p>
+        <nav class="mt-4 space-y-1" id="course-toc" aria-label="Lesson sections"></nav>
+      </aside>
     </section>
   </main>
 </div>

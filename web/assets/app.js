@@ -13,7 +13,8 @@ const state = {
   toolConfig: null,
   googleIdentityReady: false,
   googlePromptPending: false,
-  googlePromptIntent: null
+  googlePromptIntent: null,
+  courseTocObserver: null
 };
 
 const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia
@@ -1639,6 +1640,7 @@ const renderCourse = async () => {
     if (body) {
       body.innerHTML = "<p class=\"rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load course right now.</p>";
     }
+    setCourseTocMessage("Section index unavailable.");
     return;
   }
 
@@ -1688,6 +1690,125 @@ const renderCourse = async () => {
   await initCourseExplorer({
     course,
     entitlementActive: Boolean(data.entitlement_active)
+  });
+};
+
+const disconnectCourseTocObserver = () => {
+  if (state.courseTocObserver && typeof state.courseTocObserver.disconnect === "function") {
+    state.courseTocObserver.disconnect();
+  }
+  state.courseTocObserver = null;
+};
+
+const slugifyHeadingID = (value) => {
+  const headingText = String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+
+  return headingText || "section";
+};
+
+const setCourseTocMessage = (message) => {
+  const tocContainer = document.getElementById("course-toc");
+  if (!tocContainer) return;
+
+  disconnectCourseTocObserver();
+  tocContainer.innerHTML = message ? `<p class="course-toc-empty">${escapeHTML(message)}</p>` : "";
+};
+
+const setActiveCourseTocLink = (tocContainer, headingID) => {
+  if (!tocContainer || !headingID) return;
+
+  tocContainer.querySelectorAll("[data-course-toc-link]").forEach((link) => {
+    const matchesActiveHeading = link.dataset.courseTocLink === headingID;
+    link.classList.toggle("is-active", matchesActiveHeading);
+  });
+};
+
+const buildCourseLessonToc = (bodyContainer) => {
+  const tocContainer = document.getElementById("course-toc");
+  if (!tocContainer || !bodyContainer) return;
+
+  disconnectCourseTocObserver();
+
+  const headingEntries = Array.from(bodyContainer.querySelectorAll("h2, h3, h4"))
+    .map((heading) => {
+      return {
+        element: heading,
+        text: String(heading.textContent || "").trim()
+      };
+    })
+    .filter((entry) => entry.text.length > 0);
+
+  if (headingEntries.length === 0) {
+    tocContainer.innerHTML = "<p class=\"course-toc-empty\">No section headings in this lesson yet.</p>";
+    return;
+  }
+
+  const headingIDCount = new Map();
+  headingEntries.forEach((entry) => {
+    const existingHeadingID = String(entry.element.id || "").trim();
+    const baseHeadingID = slugifyHeadingID(existingHeadingID || entry.text);
+    const nextHeadingCount = (headingIDCount.get(baseHeadingID) || 0) + 1;
+    headingIDCount.set(baseHeadingID, nextHeadingCount);
+
+    entry.element.id = nextHeadingCount === 1
+      ? baseHeadingID
+      : `${baseHeadingID}-${nextHeadingCount}`;
+  });
+
+  tocContainer.innerHTML = headingEntries
+    .map((entry) => {
+      const headingID = entry.element.id;
+      const headingLevel = Number((entry.element.tagName || "H2").replace("H", ""));
+      return `<a href="#${headingID}" class="course-toc-link level-${headingLevel}" data-course-toc-link="${headingID}">${escapeHTML(entry.text)}</a>`;
+    })
+    .join("");
+
+  const tocLinks = Array.from(tocContainer.querySelectorAll("[data-course-toc-link]"));
+  if (tocLinks.length === 0) return;
+
+  const firstHeadingID = headingEntries[0]?.element?.id || "";
+  setActiveCourseTocLink(tocContainer, firstHeadingID);
+
+  tocLinks.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      const headingID = link.dataset.courseTocLink || "";
+      const targetHeading = headingID ? document.getElementById(headingID) : null;
+      if (!targetHeading) return;
+
+      targetHeading.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start"
+      });
+      setActiveCourseTocLink(tocContainer, headingID);
+    });
+  });
+
+  if (!("IntersectionObserver" in window)) return;
+
+  state.courseTocObserver = new IntersectionObserver((entries) => {
+    const visibleEntries = entries
+      .filter((entry) => entry.isIntersecting)
+      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+    const activeHeadingID = visibleEntries[0]?.target?.id || "";
+    if (!activeHeadingID) return;
+
+    setActiveCourseTocLink(tocContainer, activeHeadingID);
+  }, {
+    root: null,
+    rootMargin: "-20% 0px -65% 0px",
+    threshold: 0
+  });
+
+  headingEntries.forEach((entry) => {
+    state.courseTocObserver.observe(entry.element);
   });
 };
 
@@ -1792,6 +1913,7 @@ const initCourseExplorer = async ({ course }) => {
     if (lessonTitle) lessonTitle.textContent = "No unlocked lessons yet";
     if (lessonMeta) lessonMeta.textContent = "Upgrade to unlock paid lessons";
     body.innerHTML = "<p class=\"rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-600\">You can browse the course roadmap on the left. Paid lessons unlock with a plan.</p>";
+    setCourseTocMessage("Unlock lessons to view the section index.");
     return;
   }
 
@@ -1865,6 +1987,7 @@ const loadCourseLessonContent = async (courseSlug, lessonSlug, elements) => {
     }
     if (elements.body) {
       elements.body.innerHTML = data.html || "";
+      buildCourseLessonToc(elements.body);
     }
     if (typeof elements.onLessonLoaded === "function") {
       elements.onLessonLoaded(lesson);
@@ -1877,6 +2000,7 @@ const loadCourseLessonContent = async (courseSlug, lessonSlug, elements) => {
     if (elements.body) {
       elements.body.innerHTML = "<p class=\"rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load this lesson right now.</p>";
     }
+    setCourseTocMessage("Section index unavailable.");
   }
 };
 
