@@ -5618,7 +5618,34 @@ const closeMarkdownBlocks = (state) => {
   return closeMarkdownParagraph(state) + closeMarkdownList(state) + closeMarkdownQuote(state);
 };
 
+const renderMarkdownWithLibrary = (markdown) => {
+  if (!window.marked?.parse || !window.DOMPurify?.sanitize) {
+    return "";
+  }
+
+  const rawHTML = window.marked.parse(markdown, {
+    breaks: false,
+    gfm: true
+  });
+
+  const sanitizedHTML = window.DOMPurify.sanitize(rawHTML, {
+    ADD_ATTR: ["target", "rel", "class", "data-code-language"]
+  });
+
+  const template = document.createElement("template");
+  template.innerHTML = sanitizedHTML;
+  template.content.querySelectorAll("a[href^='http']").forEach((link) => {
+    link.setAttribute("target", "_blank");
+    link.setAttribute("rel", "noopener noreferrer");
+  });
+
+  return template.innerHTML;
+};
+
 const renderMarkdownToHTML = (markdown) => {
+  const renderedHTML = renderMarkdownWithLibrary(markdown);
+  if (renderedHTML) return renderedHTML;
+
   const raw = escapeHTML(markdown);
   const lines = raw.split("\n");
   let html = "";

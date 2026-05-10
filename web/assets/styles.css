@@ -127,9 +127,11 @@ textarea {
 }
 
 .course-reader-grid {
-  max-width: 1180px;
+  max-width: 1120px;
   margin-left: auto;
   margin-right: auto;
+  justify-content: center;
+  align-items: start;
 }
 
 .course-roadmap {
@@ -148,6 +150,9 @@ textarea {
 }
 
 .course-lesson-shell {
+  width: 100%;
+  max-width: 860px;
+  justify-self: center;
   border-color: #e6e6e6;
   border-radius: 16px;
   background: #ffffff;
@@ -159,6 +164,14 @@ textarea {
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
+}
+
+#course-body.medium-prose,
+#post-body.medium-prose {
+  width: min(100%, 720px);
+  max-width: 720px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 
 .course-lesson-header {
@@ -1376,19 +1389,23 @@ textarea {
 
 .prose ul,
 .prose ol,
+.medium-prose ul,
+.medium-prose ol,
 .markdown-list {
   margin: 1.2em 0 0;
   padding-left: 1.45em;
 }
 
 .prose ul,
+.medium-prose ul,
 .markdown-list:is(ul) {
-  list-style: disc;
+  list-style: disc outside !important;
 }
 
 .prose ol,
+.medium-prose ol,
 .markdown-list:is(ol) {
-  list-style: decimal;
+  list-style: decimal outside !important;
 }
 
 .prose li,
@@ -1402,6 +1419,18 @@ textarea {
 .medium-prose li::marker,
 .markdown-list li::marker {
   color: #6b6b6b;
+}
+
+.prose li > p:first-child,
+.medium-prose li > p:first-child {
+  display: inline;
+  margin-top: 0;
+}
+
+.prose li > p + p,
+.medium-prose li > p + p {
+  display: block;
+  margin-top: 0.8em;
 }
 
 .prose hr,
