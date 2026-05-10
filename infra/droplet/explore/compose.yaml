@@ -1,0 +1,56 @@
+x-explore-image: &explore-image
+  build:
+    context: ../../..
+    dockerfile: Dockerfile
+  image: explore-app:latest
+
+services:
+  web:
+    <<: *explore-image
+    container_name: explore-web
+    restart: unless-stopped
+    env_file:
+      - /opt/apps/explore/shared/explore.env
+    environment:
+      APP_ENV: production
+      APP_MODE: web
+      APP_PORT: "8080"
+      LOG_FILE: logs/web.log
+    expose:
+      - "8080"
+    cpus: 0.75
+    mem_limit: 768m
+    volumes:
+      - /opt/apps/explore/shared/logs:/app/logs
+    networks:
+      default:
+      edge:
+        aliases:
+          - explore-web
+
+  worker:
+    <<: *explore-image
+    container_name: explore-worker
+    restart: unless-stopped
+    env_file:
+      - /opt/apps/explore/shared/explore.env
+    environment:
+      APP_ENV: production
+      APP_MODE: worker
+      LOG_FILE: logs/worker.log
+      JUDGE_RUNNER: docker
+      JUDGE_DOCKER_BIN: docker
+      JUDGE_DOCKER_CPUS: "1"
+      JUDGE_DOCKER_COMPILE_MEMORY_MB: "512"
+      JUDGE_DOCKER_COMPILE_TIMEOUT_MS: "60000"
+      JUDGE_WORKER_CONCURRENCY: "4"
+    cpus: 0.50
+    mem_limit: 512m
+    volumes:
+      - /opt/apps/explore/shared/logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+
+networks:
+  edge:
+    external: true
+    name: edge

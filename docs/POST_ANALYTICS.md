@@ -12,8 +12,8 @@ into daily rollup tables. Raw rows older than the retention window are deleted.
   - Viewer = `user_id` when logged in, else `anon_id`.
 - **Total views**: count of `post_open` events (raw).
 - **Completes**: count of `post_complete` events.
-- **Scroll milestones**: counts for `scroll_depth` events at 25/50/75/90.
-- **Time milestones**: counts for `time_on_page` events at 15/45/90 seconds.
+- **Scroll milestones**: counts for `post_scroll_depth` events at 25/50/75/90.
+- **Time milestones**: counts for `post_time_on_page` events at 15/45/90 seconds.
 - **Promo metrics**: impressions/clicks tied to the post (via promo impression/click rows).
 
 ## Data model
@@ -48,9 +48,11 @@ Runs every 24 hours:
 Admin post analytics endpoints read from rollups **plus** same-day raw rows when the
 requested range includes the current UTC day:
 
-- `events` (post_open, post_complete, scroll_depth, time_on_page)
+- `events` (post_open, post_complete, post_scroll_depth, post_time_on_page)
 - `post_impressions`
 - `promo_impressions`, `promo_clicks`
+
+Legacy rows with `scroll_depth` / `time_on_page` are still normalized and included to keep historical analytics accurate.
 
 If a rollup row already exists for today, the raw overlay is skipped to avoid double counting.
 Caching is bypassed for ranges that include today.

@@ -51,17 +51,26 @@ func (s *Store) UpdateFunnelConfig(input FunnelConfigUpdateInput) (*FunnelConfig
 		return nil, err
 	}
 
+	updatedAt := time.Now().UTC()
 	updates := map[string]interface{}{
 		"scoring_window_days":    input.ScoringWindowDays,
 		"decay_enabled":          input.DecayEnabled,
 		"daily_decay_factor":     input.DailyDecayFactor,
 		"dormant_days_threshold": input.DormantDaysThreshold,
-		"updated_at":             time.Now().UTC(),
+		"updated_at":             updatedAt,
 	}
 
 	if err := s.db.Model(cfg).Updates(updates).Error; err != nil {
 		return nil, err
 	}
+
+	cfg.ScoringWindowDays = input.ScoringWindowDays
+	cfg.DecayEnabled = input.DecayEnabled
+	cfg.DailyDecayFactor = input.DailyDecayFactor
+	cfg.DormantDaysThreshold = input.DormantDaysThreshold
+	cfg.UpdatedAt = updatedAt
+	s.cacheSet(funnelConfigKey(), cfg)
+
 	return cfg, nil
 }
 
@@ -71,28 +80,88 @@ func (s *Store) ListFunnelEventWeights() ([]FunnelEventWeightModel, error) {
 		return cached, nil
 	}
 
-	rows := []FunnelEventWeightModel{}
-	if err := s.db.Find(&rows).Error; err != nil {
+	if err := s.ensureFunnelEventWeights(); err != nil {
 		return nil, err
-	}
-	if len(rows) > 0 {
-		s.cacheSet(key, rows)
-		return rows, nil
 	}
 
-	defaults := DefaultFunnelEventWeights()
-	if err := s.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&defaults).Error; err != nil {
+	rows := []FunnelEventWeightModel{}
+	if err := s.db.Order("event_type asc").Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	s.cacheSet(key, defaults)
-	return defaults, nil
+
+	s.cacheSet(key, rows)
+	return rows, nil
 }
 
 func (s *Store) UpsertFunnelEventWeight(weight FunnelEventWeightModel) error {
 	if weight.EventType == "" {
 		return gorm.ErrInvalidData
 	}
-	return s.db.Save(&weight).Error
+	if err := s.db.Save(&weight).Error; err != nil {
+		return err
+	}
+	s.cacheSet(funnelWeightsKey(), nil)
+	return nil
+}
+
+func (s *Store) ensureFunnelEventWeights() error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := migrateLegacyFunnelWeights(tx); err != nil {
+			return err
+		}
+
+		defaultWeights := DefaultFunnelEventWeights()
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&defaultWeights).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+type funnelEventTypeAlias struct {
+	LegacyEventType    string
+	CanonicalEventType string
+}
+
+func migrateLegacyFunnelWeights(tx *gorm.DB) error {
+	for legacyEventType, canonicalEventType := range LegacyFunnelEventAliases() {
+		alias := funnelEventTypeAlias{
+			LegacyEventType:    legacyEventType,
+			CanonicalEventType: canonicalEventType,
+		}
+		if err := migrateLegacyFunnelWeight(tx, alias); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateLegacyFunnelWeight(tx *gorm.DB, alias funnelEventTypeAlias) error {
+	legacyRow := FunnelEventWeightModel{}
+	legacyResult := tx.Where("event_type = ?", alias.LegacyEventType).First(&legacyRow)
+	if errors.Is(legacyResult.Error, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if legacyResult.Error != nil {
+		return legacyResult.Error
+	}
+
+	canonicalRow := FunnelEventWeightModel{}
+	canonicalResult := tx.Where("event_type = ?", alias.CanonicalEventType).First(&canonicalRow)
+	if errors.Is(canonicalResult.Error, gorm.ErrRecordNotFound) {
+		canonicalRow = FunnelEventWeightModel{
+			EventType: alias.CanonicalEventType,
+			Weight:    legacyRow.Weight,
+			Enabled:   legacyRow.Enabled,
+		}
+		if err := tx.Create(&canonicalRow).Error; err != nil {
+			return err
+		}
+	} else if canonicalResult.Error != nil {
+		return canonicalResult.Error
+	}
+
+	return tx.Where("event_type = ?", alias.LegacyEventType).Delete(&FunnelEventWeightModel{}).Error
 }
 
 func (s *Store) ListFunnelStageThresholds() ([]FunnelStageThresholdModel, error) {
@@ -122,7 +191,11 @@ func (s *Store) UpsertFunnelStageThreshold(threshold FunnelStageThresholdModel) 
 	if threshold.Stage == "" {
 		return gorm.ErrInvalidData
 	}
-	return s.db.Save(&threshold).Error
+	if err := s.db.Save(&threshold).Error; err != nil {
+		return err
+	}
+	s.cacheSet(funnelStagesKey(), nil)
+	return nil
 }
 
 func (s *Store) UpsertUserMetrics(metrics UserMetricsModel) error {

@@ -130,3 +130,25 @@ func (s *Store) FindAIAnalysisByFingerprint(input AIAnalysisFingerprintInput) (*
 
 	return &analysis, nil
 }
+
+type UserAIAnalysisCountInput struct {
+	UserID uint
+}
+
+type UserAIAnalysisCountOutput struct {
+	Count int64
+}
+
+func (s *Store) CountUserAIAnalyses(input UserAIAnalysisCountInput) (UserAIAnalysisCountOutput, error) {
+	if input.UserID == 0 {
+		return UserAIAnalysisCountOutput{}, nil
+	}
+
+	var analysisCount int64
+	query := s.db.Model(&AIAnalysisModel{}).Where("user_id = ?", input.UserID)
+	if err := query.Count(&analysisCount).Error; err != nil {
+		return UserAIAnalysisCountOutput{}, err
+	}
+
+	return UserAIAnalysisCountOutput{Count: analysisCount}, nil
+}

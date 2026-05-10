@@ -102,6 +102,82 @@ func (s *Store) ListSubmissions(input SubmissionListInput) (SubmissionListOutput
 	return SubmissionListOutput{Submissions: submissions}, nil
 }
 
+type UserSubmissionCountInput struct {
+	UserID uint
+}
+
+type UserSubmissionCountOutput struct {
+	Count int64
+}
+
+func (s *Store) CountUserSubmissions(input UserSubmissionCountInput) (UserSubmissionCountOutput, error) {
+	if input.UserID == 0 {
+		return UserSubmissionCountOutput{}, nil
+	}
+
+	var submissionCount int64
+	query := s.db.Model(&SubmissionModel{}).Where("user_id = ?", input.UserID)
+	if err := query.Count(&submissionCount).Error; err != nil {
+		return UserSubmissionCountOutput{}, err
+	}
+
+	return UserSubmissionCountOutput{Count: submissionCount}, nil
+}
+
+type UserActiveSubmissionCountInput struct {
+	UserID uint
+}
+
+type UserActiveSubmissionCountOutput struct {
+	Count int64
+}
+
+func (s *Store) CountUserActiveSubmissions(input UserActiveSubmissionCountInput) (UserActiveSubmissionCountOutput, error) {
+	if input.UserID == 0 {
+		return UserActiveSubmissionCountOutput{}, nil
+	}
+
+	activeStatuses := []string{
+		SubmissionStatusQueued,
+		SubmissionStatusRunning,
+	}
+
+	var activeSubmissionCount int64
+	query := s.db.Model(&SubmissionModel{}).
+		Where("user_id = ?", input.UserID).
+		Where("status IN ?", activeStatuses)
+	if err := query.Count(&activeSubmissionCount).Error; err != nil {
+		return UserActiveSubmissionCountOutput{}, err
+	}
+
+	return UserActiveSubmissionCountOutput{Count: activeSubmissionCount}, nil
+}
+
+type UserRecentSubmissionCountInput struct {
+	UserID uint
+	Since  time.Time
+}
+
+type UserRecentSubmissionCountOutput struct {
+	Count int64
+}
+
+func (s *Store) CountUserSubmissionsSince(input UserRecentSubmissionCountInput) (UserRecentSubmissionCountOutput, error) {
+	if input.UserID == 0 || input.Since.IsZero() {
+		return UserRecentSubmissionCountOutput{}, nil
+	}
+
+	var submissionCount int64
+	query := s.db.Model(&SubmissionModel{}).
+		Where("user_id = ?", input.UserID).
+		Where("queued_at >= ?", input.Since)
+	if err := query.Count(&submissionCount).Error; err != nil {
+		return UserRecentSubmissionCountOutput{}, err
+	}
+
+	return UserRecentSubmissionCountOutput{Count: submissionCount}, nil
+}
+
 type SubmissionStatusUpdateInput struct {
 	SubmissionID uint
 	Status       string

@@ -12,12 +12,14 @@ Server-rendered HTML templates for Explore, including shared partials and the Ca
 - `post.html`: post detail page shell with a centered reading column (`max-w-3xl mx-auto`) for headline, metadata, and markdown body.
 - `tools.html`: tools catalog listing with a dedicated loading state (`tools-loader`) and a hidden grid (`tools-grid`) revealed after data loads.
 - `courses.html`: course catalog page with loading state (`courses-loader`) and card grid (`courses-grid`).
-- `course.html`: course learning layout with sidebar roadmap (`course-modules-sidebar`) and lesson content viewer (`course-body`).
-- `practice.html`: practice problems catalog with loader (`problems-loader`) and grid (`problems-grid`).
+- `course.html`: course learning layout with sidebar roadmap (`course-modules-sidebar`), lesson content viewer (`course-body`), and a top promo slot container (`course-promo-slot`) rendered above lesson metadata.
+- `practice.html`: practice library page that renders list cards (`problem-lists`) instead of a flat grid, with a Figma-aligned global search field (`practice-list-search`) and a sticky right-side stats panel (`practice-stats`) for solved totals by difficulty and tag.
+- `practice_problem.html`: practice problem detail view with description/editorial/submissions tabs, a promo slot container above the problem title (`problem-promo-slot`), Figma-aligned split workspace spacing, sticky right coding pane on desktop with page-level scrolling, a light/dark theme toggle for reading + coding, CodeMirror shell that expands when the results panel is hidden, run/submit controls, results summary, and an AI action button beside the console title; the editorial tab includes a dedicated official-solutions container (`problem-editorial-solutions`) and loads Highlight.js assets so fenced code blocks render with language-aware syntax colors, while submission history uses row selection (highlight + inline expansion under the selected row) instead of a separate "View" action and AI actions are shown only for non-accepted verdicts.
 - `pricing.html`: pricing page with a dedicated loading state (`pricing-loader`), a hidden plans grid (`pricing-cards`) revealed after plans load, and value-focused copy that explains monthly vs yearly use cases.
 - `admin_tools.html`: admin controls for tool gating + tracking.
 - `admin_courses.html`: admin course builder for structured metadata, modules, and lesson editing/reordering.
-- `admin_problems.html`: admin problem manager for CRUD on practice problems, JSON specs, and editorial content.
+- `admin_problems.html`: admin problem manager for CRUD on practice problems with form-based IO spec/constraints/examples/solutions, plus dataset/testcase tooling and a list-builder section for creating/editing practice lists with searchable problem assignment.
+- `admin_users.html`: admin member overview with search + funnel-stage filter, paginated user list controls, and a detail panel that renders user profile/metrics plus paginated event and promo activity timelines.
 - `partials/`: shared navigation and admin nav fragments (see `web/templates/partials/docs.md` for the mobile hamburger menu details).
 
 ## Notes

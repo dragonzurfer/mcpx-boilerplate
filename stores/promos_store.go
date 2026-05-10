@@ -42,8 +42,8 @@ func (s *Store) ListPromosWithVariants(input PromoListInput) ([]PromoWithVariant
 }
 
 type PromoMetricsInput struct {
-	UserID  *uint
-	AnonID  string
+	UserID   *uint
+	AnonID   string
 	PromoIDs []uint
 	DayStart time.Time
 }
@@ -124,6 +124,8 @@ type PromoDecisionInput struct {
 	VariantID  *uint
 	UserID     *uint
 	AnonID     *string
+	EntityType string
+	EntityID   *uint
 	PostID     *uint
 	Slot       string
 	CreatedAt  time.Time
@@ -140,7 +142,9 @@ func (s *Store) CreatePromoDecision(input PromoDecisionInput) error {
 		VariantID:  input.VariantID,
 		UserID:     input.UserID,
 		AnonID:     input.AnonID,
-		PostID:     input.PostID,
+		EntityType: strings.ToUpper(strings.TrimSpace(input.EntityType)),
+		EntityID:   input.EntityID,
+		PostID:     resolvePromoPostID(input.PostID, input.EntityType, input.EntityID),
 		Slot:       strings.TrimSpace(input.Slot),
 		CreatedAt:  input.CreatedAt,
 	}
@@ -148,34 +152,50 @@ func (s *Store) CreatePromoDecision(input PromoDecisionInput) error {
 }
 
 type PromoInteractionInput struct {
-	PromoID   uint
-	VariantID uint
-	UserID    *uint
-	AnonID    *string
-	PostID    *uint
-	CreatedAt time.Time
+	PromoID    uint
+	VariantID  uint
+	UserID     *uint
+	AnonID     *string
+	EntityType string
+	EntityID   *uint
+	PostID     *uint
+	CreatedAt  time.Time
 }
 
 func (s *Store) LogPromoImpression(input PromoInteractionInput) error {
 	row := PromoImpressionModel{
-		PromoID:   input.PromoID,
-		VariantID: input.VariantID,
-		UserID:    input.UserID,
-		AnonID:    input.AnonID,
-		PostID:    input.PostID,
-		CreatedAt: input.CreatedAt,
+		PromoID:    input.PromoID,
+		VariantID:  input.VariantID,
+		UserID:     input.UserID,
+		AnonID:     input.AnonID,
+		EntityType: strings.ToUpper(strings.TrimSpace(input.EntityType)),
+		EntityID:   input.EntityID,
+		PostID:     resolvePromoPostID(input.PostID, input.EntityType, input.EntityID),
+		CreatedAt:  input.CreatedAt,
 	}
 	return s.db.Create(&row).Error
 }
 
 func (s *Store) LogPromoClick(input PromoInteractionInput) error {
 	row := PromoClickModel{
-		PromoID:   input.PromoID,
-		VariantID: input.VariantID,
-		UserID:    input.UserID,
-		AnonID:    input.AnonID,
-		PostID:    input.PostID,
-		CreatedAt: input.CreatedAt,
+		PromoID:    input.PromoID,
+		VariantID:  input.VariantID,
+		UserID:     input.UserID,
+		AnonID:     input.AnonID,
+		EntityType: strings.ToUpper(strings.TrimSpace(input.EntityType)),
+		EntityID:   input.EntityID,
+		PostID:     resolvePromoPostID(input.PostID, input.EntityType, input.EntityID),
+		CreatedAt:  input.CreatedAt,
 	}
 	return s.db.Create(&row).Error
+}
+
+func resolvePromoPostID(postID *uint, entityType string, entityID *uint) *uint {
+	if postID != nil && *postID > 0 {
+		return postID
+	}
+	if strings.EqualFold(entityType, "POST") && entityID != nil && *entityID > 0 {
+		return entityID
+	}
+	return nil
 }

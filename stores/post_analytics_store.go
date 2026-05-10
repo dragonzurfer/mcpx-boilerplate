@@ -74,12 +74,13 @@ func (s *Store) RollupPostAnalytics(input PostAnalyticsRollupInput) error {
 		postID := *evt.EntityID
 		metric := ensurePostMetric(metrics, postID, day)
 
-		switch strings.ToLower(strings.TrimSpace(evt.EventType)) {
+		eventType := normalizePostAnalyticsEventType(evt.EventType)
+		switch eventType {
 		case "post_open":
 			metric.TotalViews++
 		case "post_complete":
 			metric.Completes++
-		case "scroll_depth":
+		case "post_scroll_depth":
 			if value, ok := readIntFromMetadata(evt.Metadata, "pct"); ok {
 				switch value {
 				case 25:
@@ -92,7 +93,7 @@ func (s *Store) RollupPostAnalytics(input PostAnalyticsRollupInput) error {
 					metric.Scroll90++
 				}
 			}
-		case "time_on_page":
+		case "post_time_on_page":
 			if value, ok := readIntFromMetadata(evt.Metadata, "sec"); ok {
 				switch value {
 				case 15:
@@ -312,8 +313,22 @@ type postAnalyticsEventApplyInput struct {
 var postAnalyticsEventTypes = []string{
 	"post_open",
 	"post_complete",
+	"post_scroll_depth",
+	"post_time_on_page",
 	"scroll_depth",
 	"time_on_page",
+}
+
+func normalizePostAnalyticsEventType(eventType string) string {
+	normalizedType := strings.ToLower(strings.TrimSpace(eventType))
+	switch normalizedType {
+	case "scroll_depth":
+		return "post_scroll_depth"
+	case "time_on_page":
+		return "post_time_on_page"
+	default:
+		return normalizedType
+	}
 }
 
 func normalizePostAnalyticsRange(input postAnalyticsRangeInput) postAnalyticsRangeInput {
@@ -415,13 +430,13 @@ func (s *Store) listPostAnalyticsEvents(input postAnalyticsDayRange) ([]EventMod
 func applyPostAnalyticsEvents(input postAnalyticsEventApplyInput) PostAnalyticsSummary {
 	summary := input.Summary
 	for _, evt := range input.Events {
-		eventType := strings.ToLower(strings.TrimSpace(evt.EventType))
+		eventType := normalizePostAnalyticsEventType(evt.EventType)
 		switch eventType {
 		case "post_open":
 			summary.TotalViews++
 		case "post_complete":
 			summary.Completes++
-		case "scroll_depth":
+		case "post_scroll_depth":
 			if value, ok := readIntFromMetadata(evt.Metadata, "pct"); ok {
 				switch value {
 				case 25:
@@ -434,7 +449,7 @@ func applyPostAnalyticsEvents(input postAnalyticsEventApplyInput) PostAnalyticsS
 					summary.Scroll90++
 				}
 			}
-		case "time_on_page":
+		case "post_time_on_page":
 			if value, ok := readIntFromMetadata(evt.Metadata, "sec"); ok {
 				switch value {
 				case 15:

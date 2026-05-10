@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcpx/boilerplate/middleware"
@@ -11,6 +12,10 @@ import (
 	"github.com/mcpx/boilerplate/stores"
 	"gorm.io/gorm"
 )
+
+const freeAIAnalysisLimit = 5
+
+var errFreeAIAnalysisLimitReached = errors.New("free ai analysis limit reached")
 
 type AIAnalysisHandler struct {
 	Service *services.AIAnalysisService
@@ -67,6 +72,16 @@ func (h *AIAnalysisHandler) create(c *gin.Context) {
 		AllowFullSolution: request.AllowFullSolution,
 	})
 
+	if err := h.ensureAnalysisAccess(user.ID); err != nil {
+		if errors.Is(err, errFreeAIAnalysisLimitReached) {
+			c.JSON(http.StatusPaymentRequired, gin.H{"error": "FREE_AI_ANALYSIS_LIMIT_REACHED"})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "analysis limit unavailable"})
+		return
+	}
+
 	response, err := h.Service.AnalyzeSubmission(services.AnalysisSubmissionInput{
 		SubmissionID: request.SubmissionID,
 		UserID:       user.ID,
@@ -97,6 +112,16 @@ func (h *AIAnalysisHandler) verify(c *gin.Context) {
 		HintLevel:         request.Policy.HintLevel,
 		AllowFullSolution: request.Policy.AllowFullSolution,
 	})
+
+	if err := h.ensureAnalysisAccess(user.ID); err != nil {
+		if errors.Is(err, errFreeAIAnalysisLimitReached) {
+			c.JSON(http.StatusPaymentRequired, gin.H{"error": "FREE_AI_ANALYSIS_LIMIT_REACHED"})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "analysis limit unavailable"})
+		return
+	}
 
 	response, err := h.Service.AnalyzeVerifiedPayload(services.AnalysisVerifyInput{
 		SubmissionID: request.SubmissionID,
@@ -171,6 +196,33 @@ func normalizeAnalysisPolicy(input analysisPolicyInput) services.AnalysisPolicy 
 		HintLevel:         hintLevel,
 		AllowFullSolution: input.AllowFullSolution,
 	}
+}
+
+func (h *AIAnalysisHandler) ensureAnalysisAccess(userID uint) error {
+	if userID == 0 {
+		return gorm.ErrRecordNotFound
+	}
+
+	_, entitlementErr := h.Service.Store.GetActiveEntitlement(stores.EntitlementLookupInput{
+		UserID: userID,
+		Now:    time.Now().UTC(),
+	})
+	if entitlementErr == nil {
+		return nil
+	}
+	if !errors.Is(entitlementErr, gorm.ErrRecordNotFound) {
+		return entitlementErr
+	}
+
+	countOutput, countErr := h.Service.Store.CountUserAIAnalyses(stores.UserAIAnalysisCountInput{UserID: userID})
+	if countErr != nil {
+		return countErr
+	}
+	if countOutput.Count >= freeAIAnalysisLimit {
+		return errFreeAIAnalysisLimitReached
+	}
+
+	return nil
 }
 
 func writeAnalysisError(c *gin.Context, err error) {

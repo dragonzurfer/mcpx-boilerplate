@@ -1,0 +1,26 @@
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: droplet-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./conf.d:/etc/nginx/conf.d:ro
+      - ./www:/var/www/certbot:ro
+      - ./certs:/etc/letsencrypt:ro
+    networks:
+      - edge
+
+  certbot:
+    image: certbot/certbot:latest
+    profiles:
+      - manual
+    volumes:
+      - ./certs:/etc/letsencrypt
+      - ./www:/var/www/certbot
+
+networks:
+  edge:
+    name: edge

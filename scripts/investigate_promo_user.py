@@ -93,16 +93,20 @@ def describe_event_weight(event_type):
     key = (event_type or "").lower()
     if key == "post_open":
         return "One time when a post is opened."
-    if key == "scroll_depth":
+    if key in ("post_scroll_depth", "scroll_depth"):
         return "Fires at 25/50/75/90% scroll milestones."
-    if key == "time_on_page":
+    if key in ("post_time_on_page", "time_on_page"):
         return "Fires at 15/45/90 seconds."
     if key == "post_complete":
         return "Triggered after scroll + time completion."
-    if key == "promo_click":
+    if key in ("post_promo_click", "promo_click"):
         return "CTA clicks on promos."
-    if key == "paywall_hit":
+    if key in ("post_paywall_hit", "paywall_hit"):
         return "Locked content attempts."
+    if key.startswith("course_"):
+        return "Course engagement contribution to funnel score."
+    if key.startswith("practice_"):
+        return "Practice engagement contribution to funnel score."
     return "Event contribution to funnel score."
 
 

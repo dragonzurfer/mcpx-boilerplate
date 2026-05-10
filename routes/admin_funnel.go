@@ -18,6 +18,13 @@ type funnelConfigRequest struct {
 	DormantDaysThreshold int     `json:"dormant_days_threshold"`
 }
 
+type funnelConfigResponse struct {
+	ScoringWindowDays    int     `json:"scoring_window_days"`
+	DecayEnabled         bool    `json:"decay_enabled"`
+	DailyDecayFactor     float64 `json:"daily_decay_factor"`
+	DormantDaysThreshold int     `json:"dormant_days_threshold"`
+}
+
 type funnelWeightRequest struct {
 	EventType string `json:"event_type"`
 	Weight    int    `json:"weight"`
@@ -46,7 +53,7 @@ func (h *AdminFunnelHandler) getConfig(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load config"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"config": cfg})
+	c.JSON(http.StatusOK, gin.H{"config": serializeFunnelConfig(cfg)})
 }
 
 func (h *AdminFunnelHandler) updateConfig(c *gin.Context) {
@@ -65,7 +72,7 @@ func (h *AdminFunnelHandler) updateConfig(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update config"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"config": cfg})
+	c.JSON(http.StatusOK, gin.H{"config": serializeFunnelConfig(cfg)})
 }
 
 func (h *AdminFunnelHandler) listWeights(c *gin.Context) {
@@ -119,4 +126,17 @@ func (h *AdminFunnelHandler) updateStages(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func serializeFunnelConfig(cfg *stores.FunnelConfigModel) funnelConfigResponse {
+	if cfg == nil {
+		return funnelConfigResponse{}
+	}
+
+	return funnelConfigResponse{
+		ScoringWindowDays:    cfg.ScoringWindowDays,
+		DecayEnabled:         cfg.DecayEnabled,
+		DailyDecayFactor:     cfg.DailyDecayFactor,
+		DormantDaysThreshold: cfg.DormantDaysThreshold,
+	}
 }

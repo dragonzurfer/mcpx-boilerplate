@@ -61,6 +61,24 @@ func (s *Store) GetUserByID(userID uint) (*UserModel, error) {
 	return &user, nil
 }
 
+func (s *Store) GetPreferredIdentityForUser(userID uint) (*OAuthIdentityModel, error) {
+	if userID == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	identity := OAuthIdentityModel{}
+	if err := s.db.Where("user_id = ? AND provider = ?", userID, "google").First(&identity).Error; err == nil {
+		return &identity, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	if err := s.db.Where("user_id = ?", userID).Order("id asc").First(&identity).Error; err != nil {
+		return nil, err
+	}
+	return &identity, nil
+}
+
 func (s *Store) GetOrCreateUserWithIdentity(input UserIdentityInput) (*UserModel, error) {
 	provider := strings.TrimSpace(input.Provider)
 	providerUserID := strings.TrimSpace(input.ProviderUserID)

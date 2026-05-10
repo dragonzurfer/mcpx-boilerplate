@@ -9,6 +9,7 @@ GORM models and persistence helpers for Explore.
 - `users`, `oauth_identities`
 - `posts`, `tags`, `post_tags`
 - `problems`
+- `problem_lists`, `problem_list_problems`
 - `datasets`, `testcases`, `solutions`
 - `submissions`, `submission_results`, `ai_analyses`
 - `courses`, `course_modules`, `course_lessons`
@@ -25,15 +26,23 @@ GORM models and persistence helpers for Explore.
 - MySQL DSN normalization (`normalizeDSN`) now enforces `parseTime=true`, `interpolateParams=true`, and safe TLS defaults for managed DBs before GORM opens the connection.
 - MySQL connection pool tuning is applied during `NewStore` (`max open/idle`, idle timeout, lifetime) to reduce connection churn.
 - User lookup + upsert with OAuth identity
+- Admin user listing supports optional funnel-stage filtering (via `user_metrics.stage`) and paginated list metadata.
+- Admin user activity queries expose paginated events plus merged promo decisions/impressions/clicks from existing tables (no new service layer required).
 - Post/course CRUD + HTML cache update
 - Problem CRUD with JSON statement, IO spec, constraints, tags, and editorial helpers
+- Problem list CRUD + list-membership ordering helpers (with slug normalization and assignment validation)
 - Dataset/testcase CRUD with execution policy + validator defaults
+- Testcase listing orders by `group`, `position`, and `id` with escaped SQL for the reserved `group` column in MySQL.
 - Submission queueing (claim next) + result persistence
+- Submission count helpers for user-level quota checks, including active in-flight submission counts (`QUEUED`/`RUNNING`) and time-window counts (`queued_at >= since`) for per-minute throttling
+- Solved-problem derivation for a user now requires an accepted `SUBMIT` (`mode=SUBMIT` + `AC` verdict in submission results); accepted `RUN` attempts do not mark the problem solved.
 - AI analysis caching (fingerprint lookup + response storage)
+- AI analysis count helpers for user-level quota checks
 - Course metadata JSON helpers (`ParseCourseMetadata` / `SerializeCourseMetadata`) and course/module/lesson CRUD + reorder helpers (metadata module/lesson counts are synced automatically when structure changes)
-- Event batch ingest, anon merge, and daily post impression de-dup
-- Funnel config + metrics upsert (weights/stages auto-seeded with defaults on first read)
-- Promo metrics + impression/click logging
+- Event batch ingest, anon merge, and daily post impression de-dup (supports post/course/practice event families for funnel scoring)
+- Funnel config + metrics upsert (weights/stages auto-seeded on read, with legacy post weight keys migrated to canonical `post_*` rows)
+- Funnel config/weight/stage updates refresh cache entries immediately so admin reads reflect saved values without waiting for TTL expiry.
+- Promo metrics + impression/click logging (now stores optional `entity_type` + `entity_id` for post/course/practice promo surfaces, while keeping `post_id` for post analytics joins)
 - Post analytics rollup (daily aggregation + retention cleanup) plus same-day raw overlays for real-time admin views
 - Tool catalog seeding, per-user usage state, and tool event logging
 - Tool daily rollups and tool-event retention cleanup

@@ -10,6 +10,7 @@ type userMetricsCacheKey struct {
 
 type userListCacheKey struct {
 	Query    string `json:"query,omitempty"`
+	Stage    string `json:"stage,omitempty"`
 	Page     int    `json:"page,omitempty"`
 	PageSize int    `json:"page_size,omitempty"`
 }
@@ -61,6 +62,7 @@ func userMetricsKey(userID uint) string {
 func userListKey(input UserListInput) string {
 	key := userListCacheKey{
 		Query:    normalizeString(input.Query),
+		Stage:    normalizeString(input.Stage),
 		Page:     input.Page,
 		PageSize: input.PageSize,
 	}

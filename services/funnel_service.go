@@ -4,6 +4,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/mcpx/boilerplate/stores"
 )
 
 type EntitlementStatus string
@@ -84,7 +86,8 @@ func resolveLastActiveAt(input FunnelScoreInput) *time.Time {
 func computeScore(input FunnelScoreInput) int {
 	score := 0.0
 	for _, event := range input.Events {
-		weight := input.Weights[event.EventType]
+		eventType := stores.CanonicalFunnelEventType(event.EventType)
+		weight := input.Weights[eventType]
 		if weight == 0 {
 			continue
 		}
@@ -183,10 +186,11 @@ func countReadingEvents(input FunnelScoreInput) (int, int) {
 	reads := 0
 	completes := 0
 	for _, event := range input.Events {
-		if strings.EqualFold(event.EventType, "post_open") {
+		eventType := stores.CanonicalFunnelEventType(event.EventType)
+		if strings.EqualFold(eventType, "post_open") {
 			reads++
 		}
-		if strings.EqualFold(event.EventType, "post_complete") {
+		if strings.EqualFold(eventType, "post_complete") {
 			completes++
 		}
 	}
@@ -194,9 +198,24 @@ func countReadingEvents(input FunnelScoreInput) (int, int) {
 }
 
 func isActivityEvent(eventType string) bool {
-	value := strings.ToLower(strings.TrimSpace(eventType))
+	value := stores.CanonicalFunnelEventType(eventType)
 	switch value {
-	case "post_open", "scroll_depth", "time_on_page":
+	case "post_open",
+		"post_scroll_depth",
+		"post_time_on_page",
+		"post_complete",
+		"post_promo_click",
+		"post_paywall_hit",
+		"course_open_click",
+		"course_open",
+		"course_lesson_click",
+		"course_time_on_page",
+		"course_lesson_time_on_page",
+		"practice_problem_open",
+		"practice_time_on_page",
+		"practice_run_click",
+		"practice_submit_click",
+		"practice_ai_analyze_click":
 		return true
 	default:
 		return false

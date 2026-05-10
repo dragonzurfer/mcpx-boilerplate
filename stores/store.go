@@ -33,6 +33,8 @@ func NewStore(dsn string) (*Store, error) {
 		&TagModel{},
 		&PostTagModel{},
 		&ProblemModel{},
+		&ProblemListModel{},
+		&ProblemListProblemModel{},
 		&DatasetModel{},
 		&TestcaseModel{},
 		&SolutionModel{},
@@ -61,6 +63,9 @@ func NewStore(dsn string) (*Store, error) {
 		&PostPromoDailyMetricModel{},
 		&PaymentModel{},
 		&EntitlementModel{},
+		&DesktopLoginSessionModel{},
+		&DesktopDeviceModel{},
+		&DesktopExportModel{},
 		&AdminAuditLogModel{},
 		&SiteSettingsModel{},
 	); err != nil {

@@ -8,15 +8,15 @@ import (
 )
 
 type PromoDecisionInput struct {
-	PostAccessLevel     string
-	UserStage           string
-	Slot                string
-	EntitlementActive   bool
-	Now                 time.Time
-	RandomSeed          int64
-	Promos              []PromoCandidate
-	Metrics             map[uint]PromoMetrics
-	GlobalDailyCap      int
+	PromosAllowed          bool
+	UserStage              string
+	Slot                   string
+	EntitlementActive      bool
+	Now                    time.Time
+	RandomSeed             int64
+	Promos                 []PromoCandidate
+	Metrics                map[uint]PromoMetrics
+	GlobalDailyCap         int
 	GlobalImpressionsToday int
 }
 
@@ -26,28 +26,28 @@ type PromoDecisionOutput struct {
 }
 
 type PromoCandidate struct {
-	ID             uint
-	Code           string
-	Slot           string
-	Status         string
-	Priority       int
-	EligibleStages []string
-	CooldownHours  int
+	ID                   uint
+	Code                 string
+	Slot                 string
+	Status               string
+	Priority             int
+	EligibleStages       []string
+	CooldownHours        int
 	MaxImpressionsPerDay int
-	MaxClicksPerDay int
-	StartAt        *time.Time
-	EndAt          *time.Time
-	Variants       []PromoVariant
+	MaxClicksPerDay      int
+	StartAt              *time.Time
+	EndAt                *time.Time
+	Variants             []PromoVariant
 }
 
 type PromoVariant struct {
-	ID        uint
-	Headline  string
-	Body      string
-	CTAText   string
-	CTAAction string
+	ID         uint
+	Headline   string
+	Body       string
+	CTAText    string
+	CTAAction  string
 	CTAPayload string
-	Weight    int
+	Weight     int
 }
 
 type PromoMetrics struct {
@@ -57,7 +57,7 @@ type PromoMetrics struct {
 }
 
 func DecidePromo(input PromoDecisionInput) PromoDecisionOutput {
-	if strings.ToUpper(strings.TrimSpace(input.PostAccessLevel)) != "TRIAL" {
+	if !input.PromosAllowed {
 		return PromoDecisionOutput{}
 	}
 	if input.EntitlementActive {

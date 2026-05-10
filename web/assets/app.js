@@ -104,6 +104,9 @@ const renderPageForRoute = async (page) => {
   if (page === "practice") {
     await renderPractice();
   }
+  if (page === "practice-problem") {
+    await renderPracticeProblem();
+  }
   if (page === "tools") {
     await renderTools();
   }
@@ -160,6 +163,9 @@ const rerenderPageAfterAuthHydration = async (page) => {
   }
   if (page === "course") {
     await renderCourse();
+  }
+  if (page === "practice-problem") {
+    await renderPracticeProblem();
   }
   if (page === "account") {
     await renderAccount();
@@ -231,6 +237,14 @@ const getToolSlug = () => {
   if (attrSlug) return attrSlug;
   const parts = window.location.pathname.split("/").filter(Boolean);
   if (parts.length >= 2 && parts[0] === "tools") {
+    return parts[1];
+  }
+  return "";
+};
+
+const getPracticeSlug = () => {
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  if (parts.length >= 2 && parts[0] === "practice") {
     return parts[1];
   }
   return "";
@@ -316,6 +330,7 @@ const renderCourses = async () => {
       grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600\">No courses are available right now.</p>";
     } else {
       grid.innerHTML = items.map(renderCourseCard).join("");
+      bindCourseOpenTracking(grid);
     }
     setVisibility(grid, true);
     animateIn(grid.children);
@@ -329,29 +344,1172 @@ const renderCourses = async () => {
 };
 
 const renderPractice = async () => {
-  const grid = selectors.problemsGrid();
-  const loader = selectors.problemsLoader();
-  if (!grid) return;
+  const loader = document.getElementById("problem-lists-loader");
+  const listsRoot = document.getElementById("problem-lists");
+  const emptyEl = document.getElementById("problem-lists-empty");
+  const statsPanel = document.getElementById("practice-stats");
+  const globalSearchInput = document.getElementById("practice-list-search");
+
+  if (!listsRoot) return;
 
   setVisibility(loader, true);
-  setVisibility(grid, false);
+  setVisibility(listsRoot, false);
+  setVisibility(emptyEl, false);
 
   try {
-    const data = await fetchJSON(API.problems, { headers: authHeader() });
-    const items = data.items || [];
-    if (items.length === 0) {
-      grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600\">No problems are available right now.</p>";
+    const data = await fetchJSON("/api/problem-lists", { headers: authHeader() });
+    const listItems = data.items || [];
+    if (!listItems.length) {
+      if (emptyEl) {
+        emptyEl.textContent = "No problem lists are available yet.";
+        setVisibility(emptyEl, true);
+      }
+      listsRoot.innerHTML = "";
     } else {
-      grid.innerHTML = items.map(renderProblemCard).join("");
+      listsRoot.innerHTML = listItems.map((list, index) => renderPracticeListCard(list, index)).join("");
+      setVisibility(listsRoot, true);
+      bindPracticeListSearch({
+        root: listsRoot,
+        globalSearchInput,
+        emptyState: emptyEl
+      });
+      animateIn(listsRoot.children);
     }
-    setVisibility(grid, true);
-    animateIn(grid.children);
+
+    renderPracticeStats(data.stats || {}, statsPanel);
   } catch (err) {
     console.error(err);
-    grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700\">Unable to load problems right now. Please refresh and try again.</p>";
-    setVisibility(grid, true);
+    listsRoot.innerHTML = "";
+    if (emptyEl) {
+      emptyEl.textContent = "Unable to load problem lists right now. Please refresh and try again.";
+      setVisibility(emptyEl, true);
+    }
+    renderPracticeStats({}, statsPanel);
   } finally {
     setVisibility(loader, false);
+  }
+};
+
+const renderPracticeProblem = async () => {
+  const page = selectors.page();
+  if (!page) return;
+
+  const errorEl = document.getElementById("problem-error");
+  clearError(errorEl);
+
+  const slug = getPracticeSlug();
+  if (!slug) {
+    setError(errorEl, "Problem not found.");
+    return;
+  }
+
+  const breadcrumbEl = document.getElementById("problem-breadcrumb");
+  const titleEl = document.getElementById("problem-title");
+  const difficultyEl = document.getElementById("problem-difficulty");
+  const tagsEl = document.getElementById("problem-tags");
+  const statementEl = document.getElementById("problem-statement");
+  const examplesEl = document.getElementById("problem-examples");
+  const constraintsEl = document.getElementById("problem-constraints");
+  const promoSlotEl = document.getElementById("problem-promo-slot");
+  const hintsEl = document.getElementById("problem-hints");
+  const editorialEl = document.getElementById("problem-editorial-body");
+  const editorialHintsEl = document.getElementById("problem-editorial-hints");
+  const editorialSolutionsEl = document.getElementById("problem-editorial-solutions");
+  const descriptionTab = document.getElementById("problem-tab-description");
+  const editorialTab = document.getElementById("problem-tab-editorial");
+  const submissionsTab = document.getElementById("problem-tab-submissions");
+  const tabButtons = document.querySelectorAll(".problem-tab");
+
+  const languageSelect = document.getElementById("problem-language");
+  const resetTemplateBtn = document.getElementById("problem-reset-template");
+  const runBtn = document.getElementById("problem-run");
+  const submitBtn = document.getElementById("problem-submit");
+  const themeToggleBtn = document.getElementById("problem-theme-toggle");
+  const codeTextarea = document.getElementById("problem-code");
+  const editorShell = document.getElementById("problem-editor-shell");
+  const verdictBadge = document.getElementById("problem-verdict");
+  const verdictLabel = document.getElementById("problem-verdict-label");
+  const verdictMeta = document.getElementById("problem-verdict-meta");
+  const runtimeEl = document.getElementById("problem-runtime");
+  const memoryEl = document.getElementById("problem-memory");
+  const consoleEl = document.getElementById("problem-console");
+  const resultDetailsEl = document.getElementById("problem-result-details");
+  const aiActionBtn = document.getElementById("problem-ai-action");
+  const aiResultEl = document.getElementById("problem-ai-result");
+
+  const submissionsEmpty = document.getElementById("submissions-empty");
+  const submissionsTableWrapper = document.getElementById("submissions-table-wrapper");
+  const submissionsTable = document.getElementById("submissions-table");
+  const submissionsRefresh = document.getElementById("submissions-refresh");
+
+  const languageTemplates = {
+    go: `package main\n\nimport (\n  \"bufio\"\n  \"fmt\"\n  \"os\"\n)\n\nfunc main() {\n  in := bufio.NewReader(os.Stdin)\n  out := bufio.NewWriter(os.Stdout)\n  defer out.Flush()\n\n  // TODO: parse input\n  _ = in\n  fmt.Fprintln(out, \"\")\n}\n`,
+    c: `#include <stdio.h>\n\nint main(void) {\n  // TODO: parse input\n  return 0;\n}\n`,
+    cpp: `#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n  ios::sync_with_stdio(false);\n  cin.tie(nullptr);\n\n  // TODO: parse input\n  return 0;\n}\n`,
+    java: `import java.io.*;\nimport java.util.*;\n\npublic class Main {\n  public static void main(String[] args) throws Exception {\n    BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n    // TODO: parse input\n  }\n}\n`
+  };
+
+  const languageModes = {
+    go: "go",
+    c: "text/x-csrc",
+    cpp: "text/x-c++src",
+    java: "text/x-java"
+  };
+  const solutionLanguageLabels = {
+    c: "C",
+    cpp: "C++",
+    go: "Go",
+    java: "Java",
+    javascript: "JavaScript",
+    kotlin: "Kotlin",
+    python: "Python",
+    rust: "Rust",
+    typescript: "TypeScript"
+  };
+
+  const verdictPalette = {
+    AC: { label: "Accepted", badge: "text-emerald-600", text: "text-emerald-700" },
+    WRONG_ANSWER: { label: "Wrong Answer", badge: "text-rose-600", text: "text-rose-700" },
+    TLE: { label: "Time Limit", badge: "text-amber-600", text: "text-amber-700" },
+    MLE: { label: "Memory Limit", badge: "text-amber-600", text: "text-amber-700" },
+    RUNTIME_ERROR: { label: "Runtime Error", badge: "text-rose-600", text: "text-rose-700" },
+    COMPILE_ERROR: { label: "Compile Error", badge: "text-rose-600", text: "text-rose-700" },
+    OUTPUT_LIMIT_EXCEEDED: { label: "Output Limit", badge: "text-amber-600", text: "text-amber-700" },
+    INTERNAL_ERROR: { label: "Internal Error", badge: "text-rose-600", text: "text-rose-700" },
+    SKIPPED: { label: "Skipped", badge: "text-slate-500", text: "text-slate-600" }
+  };
+
+  const difficultyPalette = {
+    EASY: "bg-emerald-100 text-emerald-700",
+    MEDIUM: "bg-amber-100 text-amber-700",
+    HARD: "bg-rose-100 text-rose-700"
+  };
+
+  const aiActionPhrases = [
+    "Get a Hint",
+    "Get Unstuck",
+    "Debug My Approach",
+    "Find the Bottleneck",
+    "Review My Solution",
+    "Optimize My Code",
+    "Improve My Approach",
+    "Get Feedback"
+  ];
+  const aiSparkleIcon = `
+    <span class="ai-rotate-button-icon" aria-hidden="true">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <path d="M12 3L14.2 8.8L20 11L14.2 13.2L12 19L9.8 13.2L4 11L9.8 8.8L12 3Z" fill="currentColor"></path>
+      </svg>
+    </span>
+  `;
+
+  let problem = null;
+  let editor = null;
+  let editorDirty = false;
+  let currentSubmissionID = 0;
+  let submissionResults = new Map();
+  let submissionPayloads = new Map();
+  let submissionResultRequests = new Map();
+  let submissionPayloadRequests = new Map();
+  let submissionItems = [];
+  let selectedSubmissionID = 0;
+  let pollTimeout = null;
+  let practiceTheme = "light";
+  let aiActionPhraseIndex = 0;
+  let aiActionTicker = null;
+  let stopPracticeTimeTracking = null;
+
+  const applyPracticeTheme = (theme) => {
+    const normalizedTheme = theme === "dark" ? "dark" : "light";
+    practiceTheme = normalizedTheme;
+    page.dataset.practiceTheme = normalizedTheme;
+
+    if (themeToggleBtn) {
+      const isDarkTheme = normalizedTheme === "dark";
+      themeToggleBtn.textContent = isDarkTheme ? "Light theme" : "Dark theme";
+      themeToggleBtn.setAttribute("aria-pressed", isDarkTheme ? "true" : "false");
+    }
+
+    try {
+      localStorage.setItem("practice_theme", normalizedTheme);
+    } catch (err) {
+      // Ignore localStorage failures (private mode / blocked storage).
+    }
+
+    if (editor) {
+      editor.setOption("theme", normalizedTheme === "dark" ? "material-darker" : "default");
+      editor.refresh();
+    }
+  };
+
+  const initializePracticeTheme = () => {
+    let storedTheme = "light";
+    try {
+      storedTheme = localStorage.getItem("practice_theme") || "light";
+    } catch (err) {
+      // Ignore localStorage failures (private mode / blocked storage).
+    }
+    applyPracticeTheme(storedTheme);
+  };
+
+  const currentAIActionPhrase = () => {
+    return aiActionPhrases[aiActionPhraseIndex % aiActionPhrases.length] || "Get Feedback";
+  };
+
+  const aiActionInnerHTML = () => {
+    return `${aiSparkleIcon}<span data-ai-action-label>${escapeHTML(currentAIActionPhrase())}</span>`;
+  };
+
+  const updateAIActionLabels = () => {
+    const phrase = currentAIActionPhrase();
+    page.querySelectorAll("[data-ai-rotating-label]").forEach((button) => {
+      const label = button.querySelector("[data-ai-action-label]");
+      if (label) {
+        label.textContent = phrase;
+      } else {
+        button.innerHTML = aiActionInnerHTML();
+      }
+      button.setAttribute("aria-label", phrase);
+      button.title = phrase;
+    });
+  };
+
+  const startAIActionTicker = () => {
+    updateAIActionLabels();
+    if (aiActionTicker) {
+      return;
+    }
+    aiActionTicker = window.setInterval(() => {
+      aiActionPhraseIndex = (aiActionPhraseIndex + 1) % aiActionPhrases.length;
+      updateAIActionLabels();
+    }, 1000);
+  };
+
+  const shouldShowAIAnalysis = (verdict) => {
+    const normalized = String(verdict || "").trim().toUpperCase();
+    if (!normalized) return false;
+    return normalized !== "AC" && normalized !== "ACCEPTED";
+  };
+
+  const shouldShowPracticeSubscriptionGate = (err) => {
+    const statusCode = Number(err?.status || 0);
+    if (statusCode === 402) {
+      return true;
+    }
+
+    const errorMessage = String(err?.message || "").trim().toUpperCase();
+    if (!errorMessage) {
+      return false;
+    }
+
+    if (errorMessage.includes("FREE_SUBMISSION_LIMIT_REACHED")) {
+      return true;
+    }
+    if (errorMessage.includes("FREE_AI_ANALYSIS_LIMIT_REACHED")) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const trackPracticeEvent = (eventType, meta = {}) => {
+    if (!eventType) return;
+    const event = {
+      type: eventType,
+      entity_type: "PROBLEM",
+      meta: meta && typeof meta === "object" ? meta : {}
+    };
+    if (problem?.id) {
+      event.entity_id = Number(problem.id);
+    }
+    sendEvents([event]);
+  };
+
+  const applyVerdictStyles = (verdict) => {
+    const key = String(verdict || "").toUpperCase();
+    const meta = verdictPalette[key] || { label: key || "Pending", badge: "text-slate-500", text: "text-slate-700" };
+    if (verdictBadge) {
+      verdictBadge.textContent = meta.label;
+      verdictBadge.className = `text-xs uppercase tracking-wide ${meta.badge}`;
+    }
+    if (verdictLabel) {
+      verdictLabel.textContent = meta.label;
+      verdictLabel.className = `mt-2 text-lg font-semibold ${meta.text}`;
+    }
+  };
+
+  const setSubmissionButtonsDisabled = (disabled) => {
+    if (runBtn) runBtn.disabled = Boolean(disabled);
+    if (submitBtn) submitBtn.disabled = Boolean(disabled);
+  };
+
+  const showPendingResultSummary = (message) => {
+    const pendingMessage = String(message || "").trim() || "Waiting for results...";
+
+    setVisibility(consoleEl, true);
+    if (editorShell) editorShell.classList.remove("editor-expanded");
+    setVisibility(aiActionBtn, false);
+    applyVerdictStyles("PENDING");
+
+    if (verdictMeta) {
+      verdictMeta.textContent = pendingMessage;
+    }
+    if (runtimeEl) runtimeEl.textContent = "—";
+    if (memoryEl) memoryEl.textContent = "—";
+    if (resultDetailsEl) {
+      resultDetailsEl.classList.remove("hidden");
+      resultDetailsEl.innerHTML = `<p class="text-sm text-slate-500">${escapeHTML(pendingMessage)}</p>`;
+    }
+    if (aiResultEl) {
+      aiResultEl.classList.add("hidden");
+      aiResultEl.innerHTML = "";
+    }
+    if (editor) editor.refresh();
+  };
+
+  const showSubmissionRequestFailure = (message) => {
+    const failureMessage = String(message || "").trim() || "Submission failed.";
+    setVisibility(consoleEl, true);
+    if (editorShell) editorShell.classList.remove("editor-expanded");
+    setVisibility(aiActionBtn, false);
+    applyVerdictStyles("INTERNAL_ERROR");
+
+    if (verdictMeta) {
+      verdictMeta.textContent = "Request failed";
+    }
+    if (runtimeEl) runtimeEl.textContent = "—";
+    if (memoryEl) memoryEl.textContent = "—";
+    if (resultDetailsEl) {
+      resultDetailsEl.classList.remove("hidden");
+      resultDetailsEl.innerHTML = `
+        <div class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+          <div class="text-sm font-semibold text-rose-700">Unable to start submission</div>
+          <p class="mt-2 text-xs text-rose-700">${escapeHTML(failureMessage)}</p>
+        </div>
+      `;
+    }
+    if (aiResultEl) {
+      aiResultEl.classList.add("hidden");
+      aiResultEl.innerHTML = "";
+    }
+    if (editor) editor.refresh();
+  };
+
+  const setTab = (tab) => {
+    const tabs = {
+      description: descriptionTab,
+      editorial: editorialTab,
+      submissions: submissionsTab
+    };
+    Object.entries(tabs).forEach(([key, panel]) => {
+      setVisibility(panel, key === tab);
+    });
+    tabButtons.forEach((button) => {
+      const isActive = button.dataset.problemTab === tab;
+      button.classList.toggle("text-ink", isActive);
+      button.classList.toggle("text-slate-500", !isActive);
+    });
+    if (tab === "submissions") {
+      loadSubmissions();
+    }
+  };
+
+  const setDifficultyBadge = (value) => {
+    const key = String(value || "EASY").toUpperCase();
+    if (!difficultyEl) return;
+    difficultyEl.textContent = key;
+    difficultyEl.className = `rounded-full px-2 py-1 text-xs uppercase tracking-wide ${difficultyPalette[key] || "bg-slate-100 text-slate-600"}`;
+  };
+
+  const initEditor = () => {
+    if (!codeTextarea) return;
+    if (editor || !window.CodeMirror) {
+      codeTextarea.classList.remove("bg-transparent");
+      if (codeTextarea.dataset.editorBound !== "true") {
+        codeTextarea.addEventListener("input", () => {
+          editorDirty = true;
+        });
+        codeTextarea.dataset.editorBound = "true";
+      }
+      return;
+    }
+    editor = window.CodeMirror.fromTextArea(codeTextarea, {
+      lineNumbers: true,
+      mode: languageModes[languageSelect?.value || "go"] || "go",
+      theme: practiceTheme === "dark" ? "material-darker" : "default"
+    });
+    editor.on("change", () => {
+      editorDirty = true;
+    });
+  };
+
+  const setEditorValue = (value) => {
+    if (editor) {
+      editor.setValue(value);
+    } else if (codeTextarea) {
+      codeTextarea.value = value;
+    }
+  };
+
+  const getEditorValue = () => {
+    if (editor) return editor.getValue();
+    return codeTextarea?.value || "";
+  };
+
+  const applyTemplate = (force) => {
+    const language = languageSelect?.value || "go";
+    const template = languageTemplates[language] || "";
+    if (!template) return;
+    if (force || !getEditorValue().trim()) {
+      setEditorValue(template);
+      editorDirty = false;
+    }
+  };
+
+  const setEditorMode = () => {
+    const language = languageSelect?.value || "go";
+    if (editor) {
+      editor.setOption("mode", languageModes[language] || "go");
+    }
+  };
+
+  const asCodeFenceMarkdown = (value, languageHint = "text") => {
+    const content = String(value || "").trim();
+    if (!content) return "";
+    if (content.includes("```")) return content;
+    return `\`\`\`${languageHint}\n${content}\n\`\`\``;
+  };
+
+  const renderExamples = (examples) => {
+    if (!examplesEl) return;
+    if (!Array.isArray(examples) || examples.length === 0) {
+      examplesEl.innerHTML = "<p class=\"text-sm text-slate-500\">No examples yet.</p>";
+      return;
+    }
+    examplesEl.innerHTML = examples
+      .map((example, index) => {
+        const inputMarkdown = asCodeFenceMarkdown(example.input || "", "text");
+        const outputMarkdown = asCodeFenceMarkdown(example.output || "", "text");
+        const explanationMarkdown = String(example.explanation || "").trim();
+        return `
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-400">Example ${index + 1}</div>
+            <div class="mt-3 space-y-3 text-sm text-slate-600">
+              <div>
+                <span class="font-semibold text-slate-700">Input:</span>
+                <div class="mt-1">${inputMarkdown ? renderMarkdownToHTML(inputMarkdown) : "<p class=\"text-sm text-slate-500\">No input provided.</p>"}</div>
+              </div>
+              <div>
+                <span class="font-semibold text-slate-700">Output:</span>
+                <div class="mt-1">${outputMarkdown ? renderMarkdownToHTML(outputMarkdown) : "<p class=\"text-sm text-slate-500\">No output provided.</p>"}</div>
+              </div>
+              ${explanationMarkdown ? `<div><span class="font-semibold text-slate-700">Explanation:</span><div class="mt-1">${renderMarkdownToHTML(explanationMarkdown)}</div></div>` : ""}
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+    highlightCodeBlocks(examplesEl);
+  };
+
+  const renderHints = (hints, container) => {
+    if (!container) return;
+    if (!Array.isArray(hints) || hints.length === 0) {
+      container.innerHTML = "<p class=\"text-sm text-slate-500\">No hints published yet.</p>";
+      return;
+    }
+    container.innerHTML = hints
+      .map((hint, index) => {
+        return `
+          <details class="rounded-2xl border border-slate-200 bg-white p-3">
+            <summary class="cursor-pointer text-sm font-semibold text-slate-700">Hint ${index + 1}</summary>
+            <p class="mt-2 text-sm text-slate-600">${escapeHTML(hint)}</p>
+          </details>
+        `;
+      })
+      .join("");
+  };
+
+  const renderConstraints = (constraints) => {
+    if (!constraintsEl) return;
+    const items = [];
+    if (constraints?.time_limit_ms) items.push(`Time limit: ${constraints.time_limit_ms} ms`);
+    if (constraints?.memory_limit_kb) items.push(`Memory limit: ${constraints.memory_limit_kb} KB`);
+    if (constraints?.output_limit_kb) items.push(`Output limit: ${constraints.output_limit_kb} KB`);
+
+    const limitBlock = items.length
+      ? `<ul class="list-disc list-inside text-sm text-slate-600">${items.map((item) => `<li>${item}</li>`).join("")}</ul>`
+      : "";
+
+    const inputMarkdown = constraints?.input_constraints_markdown || "";
+    const outputMarkdown = constraints?.output_constraints_markdown || "";
+    const markdownBlock = [inputMarkdown, outputMarkdown].filter(Boolean).join("\n");
+    const markdownHTML = markdownBlock ? renderMarkdownToHTML(markdownBlock) : "<p class=\"text-sm text-slate-500\">No constraints listed yet.</p>";
+
+    constraintsEl.innerHTML = `${limitBlock}${markdownHTML}`;
+    highlightCodeBlocks(constraintsEl);
+  };
+
+  const renderOfficialSolutions = (solutions) => {
+    if (!editorialSolutionsEl) return;
+    if (!Array.isArray(solutions) || solutions.length === 0) {
+      editorialSolutionsEl.innerHTML = "<p class=\"text-sm text-slate-500\">No official solutions published yet.</p>";
+      return;
+    }
+
+    editorialSolutionsEl.innerHTML = solutions
+      .map((solution, index) => {
+        const providedLanguage = String(solution?.language || "").trim();
+        const codeLanguage = normalizeMarkdownCodeLanguage(providedLanguage || "text");
+        const languageLabel = solutionLanguageLabels[codeLanguage] || providedLanguage || "Code";
+        const codeText = String(solution?.code || "").trim();
+        const codeMarkdown = asCodeFenceMarkdown(codeText, codeLanguage || "text");
+
+        const complexity = solution?.complexity && typeof solution.complexity === "object"
+          ? solution.complexity
+          : {};
+        const timeComplexity = String(complexity.time || "").trim();
+        const spaceComplexity = String(complexity.space || "").trim();
+        const approachSummary = String(solution?.approach_summary || "").trim();
+
+        return `
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="text-sm font-semibold text-slate-700">Solution ${index + 1}</div>
+              <span class="rounded-full bg-slate-200 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700">${escapeHTML(languageLabel)}</span>
+            </div>
+            ${approachSummary ? `<div class="mt-3 text-sm text-slate-600">${renderMarkdownToHTML(approachSummary)}</div>` : ""}
+            ${timeComplexity || spaceComplexity ? `
+              <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
+                ${timeComplexity ? `<span class="rounded-full bg-white px-2 py-1 border border-slate-200">Time: ${escapeHTML(timeComplexity)}</span>` : ""}
+                ${spaceComplexity ? `<span class="rounded-full bg-white px-2 py-1 border border-slate-200">Space: ${escapeHTML(spaceComplexity)}</span>` : ""}
+              </div>
+            ` : ""}
+            <div class="mt-3">${codeMarkdown ? renderMarkdownToHTML(codeMarkdown) : "<p class=\"text-sm text-slate-500\">No code provided.</p>"}</div>
+          </article>
+        `;
+      })
+      .join("");
+
+    highlightCodeBlocks(editorialSolutionsEl);
+  };
+
+  const renderResultDetails = (result, target) => {
+    if (!target) return;
+    if (!result) {
+      target.innerHTML = "";
+      target.classList.add("hidden");
+      return;
+    }
+    target.classList.remove("hidden");
+    const compile = result.compile || {};
+    if (compile.verdict === "COMPILE_ERROR") {
+      target.innerHTML = `
+        <div class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+          <div class="text-sm font-semibold text-rose-700">Compile error</div>
+          <pre class="mt-2 whitespace-pre-wrap text-xs text-rose-600">${escapeHTML(compile.stderr || "Compilation failed.")}</pre>
+        </div>
+      `;
+      return;
+    }
+    const tests = Array.isArray(result.tests) ? result.tests : [];
+    const overallVerdict = String(result.overall?.verdict || "").toUpperCase();
+    if (overallVerdict && overallVerdict !== "AC" && tests.length === 0) {
+      target.innerHTML = `
+        <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <div class="text-sm font-semibold text-amber-700">Execution failed</div>
+          <p class="mt-2 text-xs text-amber-700">No tests were executed. Verdict: ${escapeHTML(overallVerdict)}.</p>
+        </div>
+      `;
+      return;
+    }
+    const failed = tests.find((test) => String(test.verdict || "").toUpperCase() !== "AC");
+    if (!failed) {
+      target.innerHTML = "<p class=\"text-sm text-emerald-600\">All tests passed.</p>";
+      return;
+    }
+    const detail = failed.detail || {};
+    const input = detail.input ? `<pre class="mt-1 whitespace-pre-wrap text-xs text-slate-700">${escapeHTML(detail.input)}</pre>` : "<p class=\"text-xs text-slate-500\">Hidden input</p>";
+    const expected = detail.expected ? `<pre class="mt-1 whitespace-pre-wrap text-xs text-slate-700">${escapeHTML(detail.expected)}</pre>` : "<p class=\"text-xs text-slate-500\">Hidden expected output</p>";
+    const actual = detail.actual ? `<pre class="mt-1 whitespace-pre-wrap text-xs text-slate-700">${escapeHTML(detail.actual)}</pre>` : "<p class=\"text-xs text-slate-500\">Hidden actual output</p>";
+    target.innerHTML = `
+      <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div class="text-sm font-semibold text-slate-700">Failed testcase</div>
+        <div class="mt-3 space-y-2">
+          <div><span class="text-xs uppercase tracking-wide text-slate-500">Input</span>${input}</div>
+          <div><span class="text-xs uppercase tracking-wide text-slate-500">Expected</span>${expected}</div>
+          <div><span class="text-xs uppercase tracking-wide text-slate-500">Actual</span>${actual}</div>
+        </div>
+      </div>
+    `;
+  };
+
+  const updateResultSummary = (result) => {
+    if (!result) {
+      setVisibility(consoleEl, false);
+      if (editorShell) editorShell.classList.add("editor-expanded");
+      setVisibility(aiActionBtn, false);
+      applyVerdictStyles("PENDING");
+      if (verdictMeta) verdictMeta.textContent = "";
+      if (runtimeEl) runtimeEl.textContent = "—";
+      if (memoryEl) memoryEl.textContent = "—";
+      renderResultDetails(null, resultDetailsEl);
+      if (aiResultEl) {
+        aiResultEl.classList.add("hidden");
+        aiResultEl.innerHTML = "";
+      }
+      if (editor) editor.refresh();
+      return;
+    }
+    setVisibility(consoleEl, true);
+    if (editorShell) editorShell.classList.remove("editor-expanded");
+    const overall = result.overall || {};
+    const allowAIAnalysis = shouldShowAIAnalysis(overall.verdict);
+    setVisibility(aiActionBtn, allowAIAnalysis);
+    if (!allowAIAnalysis && aiResultEl) {
+      aiResultEl.classList.add("hidden");
+      aiResultEl.innerHTML = "";
+    }
+    applyVerdictStyles(overall.verdict);
+    if (verdictMeta) {
+      const passed = Number(overall.passed || 0);
+      const total = Number(overall.total || 0);
+      const attempted = Number(overall.attempted || 0);
+      const stopped = overall.stopped_early ? " · stopped early" : "";
+      verdictMeta.textContent = `${passed}/${total} passed · ${attempted} attempted${stopped}`;
+    }
+    if (runtimeEl) runtimeEl.textContent = `${Number(overall.runtime_ms || 0)} ms`;
+    if (memoryEl) memoryEl.textContent = `${(Number(overall.memory_kb || 0) / 1024).toFixed(2)} MB`;
+    renderResultDetails(result, resultDetailsEl);
+    if (editor) editor.refresh();
+  };
+
+  const renderAIResult = (target, result) => {
+    if (!target) return;
+    if (!result || !result.summary) {
+      target.innerHTML = "<p class=\"text-sm text-slate-500\">No AI analysis available yet.</p>";
+      return;
+    }
+    const hints = Array.isArray(result.hints) ? result.hints : [];
+    const nextActions = Array.isArray(result.next_actions) ? result.next_actions : [];
+    const complexity = result.complexity_feedback || {};
+    target.innerHTML = `
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-sm font-semibold text-slate-700">Summary</div>
+        <p class="mt-2 text-sm text-slate-600">${escapeHTML(result.summary)}</p>
+        ${hints.length ? `<div class="mt-4 text-sm font-semibold text-slate-700">Hints</div>
+        <ul class="mt-2 list-disc list-inside text-sm text-slate-600">${hints
+          .map((hint) => `<li>${escapeHTML(hint.text || hint)}</li>`)
+          .join("")}</ul>` : ""}
+        ${complexity.detected ? `<div class="mt-4 text-sm font-semibold text-slate-700">Complexity</div>
+        <div class="mt-2 text-sm text-slate-600">Detected: ${escapeHTML(complexity.detected.time || "—")} time, ${escapeHTML(
+          complexity.detected.space || "—"
+        )} space.</div>` : ""}
+        ${nextActions.length ? `<div class="mt-4 text-sm font-semibold text-slate-700">Next actions</div>
+        <ul class="mt-2 list-disc list-inside text-sm text-slate-600">${nextActions
+          .map((item) => `<li>${escapeHTML(item)}</li>`)
+          .join("")}</ul>` : ""}
+      </div>
+    `;
+  };
+
+  const runAIAnalysis = async (submissionID, target) => {
+    if (!submissionID) {
+      showToast("Submit code before requesting AI analysis.");
+      return;
+    }
+    if (!state.token) {
+      showToast("Sign in to use AI analysis.");
+      return;
+    }
+    if (!target) return;
+
+    trackPracticeEvent("practice_ai_analyze_click", {
+      submission_id: Number(submissionID || 0)
+    });
+
+    target.classList.remove("hidden");
+    target.innerHTML = "<p class=\"text-sm text-slate-500\">Analyzing with AI...</p>";
+    try {
+      const data = await fetchJSON("/api/ai-analysis", {
+        method: "POST",
+        body: JSON.stringify({
+          submission_id: submissionID,
+          analysis_mode: "COACH",
+          hint_level: 2,
+          allow_full_solution: false
+        })
+      });
+      renderAIResult(target, data.result || {});
+    } catch (err) {
+      if (shouldShowPracticeSubscriptionGate(err)) {
+        target.classList.add("hidden");
+        target.innerHTML = "";
+        showPaywallGate();
+        return;
+      }
+      target.innerHTML = "<p class=\"text-sm text-rose-600\">AI analysis failed. Try again.</p>";
+    }
+  };
+
+  const pollSubmissionResult = async (submissionID) => {
+    if (!submissionID) return null;
+    if (pollTimeout) {
+      clearTimeout(pollTimeout);
+      pollTimeout = null;
+    }
+
+    return new Promise((resolve) => {
+      const poll = async () => {
+        try {
+          const data = await fetchJSON(`/api/submissions/${submissionID}/result`, { headers: authHeader() });
+          if (data?.result) {
+            updateResultSummary(data.result);
+            submissionResults.set(submissionID, data.result);
+            currentSubmissionID = submissionID;
+            if (aiResultEl) aiResultEl.classList.add("hidden");
+            await loadSubmissions();
+            resolve(data.result);
+            return;
+          }
+
+          const status = String(data?.status || "").toUpperCase();
+          if (status === "QUEUED") {
+            showPendingResultSummary("Queued...");
+          } else if (status === "RUNNING") {
+            showPendingResultSummary("Running...");
+          } else if (status && status !== "RUNNING" && status !== "QUEUED") {
+            showSubmissionRequestFailure("Submission finished without a result payload.");
+            showToast("Submission failed before producing results.");
+            resolve(null);
+            return;
+          }
+        } catch (err) {
+          console.error(err);
+        }
+
+        pollTimeout = setTimeout(poll, 2000);
+      };
+
+      poll();
+    });
+  };
+
+  const renderSubmissionLimitError = (errorMessage) => {
+    const normalizedMessage = String(errorMessage || "").trim().toUpperCase();
+    if (!normalizedMessage) {
+      return errorMessage;
+    }
+
+    if (normalizedMessage.includes("SUBMISSION_ALREADY_IN_PROGRESS")) {
+      return "You already have a run in progress. Please wait for it to complete.";
+    }
+    if (normalizedMessage.includes("SUBMISSION_RATE_LIMIT_REACHED")) {
+      return "Rate limit reached. Free users can submit 5/min, paid users can submit 20/min.";
+    }
+
+    return errorMessage;
+  };
+
+  const submitCode = async (mode) => {
+    if (!state.token) {
+      showToast("Sign in to run or submit.");
+      return;
+    }
+    if (!problem?.id) {
+      showToast("Problem not loaded yet.");
+      return;
+    }
+
+    const normalizedMode = String(mode || "").toUpperCase() === "SUBMIT" ? "SUBMIT" : "RUN";
+    const eventType = normalizedMode === "SUBMIT" ? "practice_submit_click" : "practice_run_click";
+    trackPracticeEvent(eventType, { language: languageSelect?.value || "go" });
+
+    setSubmissionButtonsDisabled(true);
+    showPendingResultSummary(normalizedMode === "SUBMIT" ? "Submitting..." : "Running...");
+    try {
+      const payload = {
+        problem_id: problem.id,
+        mode: normalizedMode,
+        language: languageSelect?.value || "go",
+        code: getEditorValue()
+      };
+
+      const data = await fetchJSON("/api/submissions", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+
+      currentSubmissionID = data.submission_id;
+      showPendingResultSummary("Queued...");
+      await pollSubmissionResult(data.submission_id);
+    } catch (err) {
+      if (shouldShowPracticeSubscriptionGate(err)) {
+        showPaywallGate();
+        return;
+      }
+
+      const message = renderSubmissionLimitError(err.message || "Submission failed.");
+      showSubmissionRequestFailure(message);
+      showToast(message);
+    } finally {
+      setSubmissionButtonsDisabled(false);
+    }
+  };
+
+  const ensureSubmissionResult = async (submissionID) => {
+    if (!submissionID) return null;
+    if (submissionResults.has(submissionID)) {
+      return submissionResults.get(submissionID);
+    }
+
+    if (submissionResultRequests.has(submissionID)) {
+      return submissionResultRequests.get(submissionID);
+    }
+
+    const request = (async () => {
+      try {
+        const data = await fetchJSON(`/api/submissions/${submissionID}/result`, { headers: authHeader() });
+        const result = data?.result || null;
+        if (result) {
+          submissionResults.set(submissionID, result);
+        }
+        return result;
+      } catch (err) {
+        return null;
+      } finally {
+        submissionResultRequests.delete(submissionID);
+      }
+    })();
+
+    submissionResultRequests.set(submissionID, request);
+    return request;
+  };
+
+  const ensureSubmissionPayload = async (submissionID) => {
+    if (!submissionID) return null;
+    if (submissionPayloads.has(submissionID)) {
+      return submissionPayloads.get(submissionID);
+    }
+    if (submissionPayloadRequests.has(submissionID)) {
+      return submissionPayloadRequests.get(submissionID);
+    }
+
+    const request = (async () => {
+      try {
+        const data = await fetchJSON(`/api/submissions/${submissionID}`, { headers: authHeader() });
+        const submission = data?.submission || null;
+        if (submission) {
+          submissionPayloads.set(submissionID, submission);
+        }
+        return submission;
+      } catch (err) {
+        return null;
+      } finally {
+        submissionPayloadRequests.delete(submissionID);
+      }
+    })();
+
+    submissionPayloadRequests.set(submissionID, request);
+    return request;
+  };
+
+  const applySubmissionCodeToEditor = async (submissionID) => {
+    const submission = await ensureSubmissionPayload(submissionID);
+    if (!submission) return;
+
+    const nextLanguage = String(submission.language || "").toLowerCase();
+    if (languageSelect && nextLanguage && languageSelect.value !== nextLanguage) {
+      languageSelect.value = nextLanguage;
+      setEditorMode();
+    }
+
+    const code = String(submission.code_text || "");
+    if (!code.trim()) return;
+
+    setEditorValue(code);
+    editorDirty = true;
+    if (editor) {
+      editor.refresh();
+    }
+  };
+
+  const renderSubmissionExpandedRow = (submissionID) => {
+    const result = submissionResults.get(submissionID);
+    if (!result) {
+      return `
+        <tr data-submission-expanded-row="${submissionID}">
+          <td colspan="5" class="px-4 pb-4">
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">Result pending...</div>
+          </td>
+        </tr>
+      `;
+    }
+
+    const overall = result.overall || {};
+    const allowAIAnalysis = shouldShowAIAnalysis(overall.verdict);
+    const detailElement = document.createElement("div");
+    renderResultDetails(result, detailElement);
+
+    const aiPanel = allowAIAnalysis
+      ? `
+            <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-sm font-semibold text-slate-700">Analyze with AI</div>
+                <button class="ai-rotate-button ai-rotate-button-detail" data-detail-ai="${submissionID}" data-ai-rotating-label>
+                  ${aiActionInnerHTML()}
+                </button>
+              </div>
+              <div class="mt-3 hidden" id="submission-ai-result-${submissionID}"></div>
+            </div>
+        `
+      : "";
+
+    return `
+      <tr data-submission-expanded-row="${submissionID}">
+        <td colspan="5" class="px-4 pb-4">
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <div class="text-sm font-semibold text-slate-700">Submission result</div>
+            <div class="mt-3 text-sm text-slate-600">Verdict: <span class="font-semibold">${escapeHTML(overall.verdict || "—")}</span></div>
+            <div class="mt-2 text-sm text-slate-600">Passed: ${overall.passed || 0}/${overall.total || 0}</div>
+            <div class="mt-4">${detailElement.innerHTML}</div>
+            ${aiPanel}
+          </div>
+        </td>
+      </tr>
+    `;
+  };
+
+  const renderSubmissionRows = (submission) => {
+    const result = submissionResults.get(submission.id);
+    const verdict = result?.overall?.verdict || submission.status || "QUEUED";
+    const verdictMeta = verdictPalette[String(verdict || "").toUpperCase()] || { label: verdict, badge: "text-slate-500" };
+    const passed = result?.overall ? `${result.overall.passed}/${result.overall.total}` : "—";
+    const isSelected = selectedSubmissionID === submission.id;
+    const rowClass = isSelected ? "submission-history-row submission-history-row-active" : "submission-history-row";
+
+    const baseRow = `
+      <tr data-select-submission="${submission.id}" class="${rowClass} cursor-pointer transition-colors">
+        <td class="py-3 text-slate-700">${formatDate(submission.queued_at)}</td>
+        <td class="py-3 text-slate-600">${submission.mode}</td>
+        <td class="py-3 text-slate-600">${submission.language}</td>
+        <td class="py-3 ${verdictMeta.badge}" data-submission-verdict>${verdictMeta.label}</td>
+        <td class="py-3 text-slate-600" data-submission-passed>${passed}</td>
+      </tr>
+    `;
+
+    if (!isSelected) return baseRow;
+    return `${baseRow}${renderSubmissionExpandedRow(submission.id)}`;
+  };
+
+  const renderSubmissionsTable = () => {
+    if (!submissionsTable) return;
+    submissionsTable.innerHTML = submissionItems.map(renderSubmissionRows).join("");
+    updateAIActionLabels();
+
+    submissionsTable.querySelectorAll("[data-select-submission]").forEach((row) => {
+      row.addEventListener("click", async () => {
+        const submissionID = Number(row.dataset.selectSubmission || 0);
+        if (!submissionID) return;
+        await selectSubmissionRow(submissionID);
+      });
+    });
+
+    submissionsTable.querySelectorAll("[data-detail-ai]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const submissionID = Number(button.dataset.detailAi || 0);
+        if (!submissionID) return;
+        const target = document.getElementById(`submission-ai-result-${submissionID}`);
+        if (target) {
+          runAIAnalysis(submissionID, target);
+        }
+      });
+    });
+  };
+
+  const selectSubmissionRow = async (submissionID) => {
+    if (!submissionID) return;
+    const changedSelection = selectedSubmissionID !== submissionID;
+    selectedSubmissionID = submissionID;
+    if (changedSelection) {
+      renderSubmissionsTable();
+    }
+
+    const result = await ensureSubmissionResult(submissionID);
+    if (result) {
+      submissionResults.set(submissionID, result);
+      updateResultSummary(result);
+      currentSubmissionID = submissionID;
+      if (aiResultEl) aiResultEl.classList.add("hidden");
+    }
+
+    await applySubmissionCodeToEditor(submissionID);
+    renderSubmissionsTable();
+  };
+
+  const loadSubmissions = async () => {
+    if (!submissionsTable) return;
+    if (!problem?.id) {
+      setVisibility(submissionsTableWrapper, false);
+      return;
+    }
+    if (!state.user) {
+      if (submissionsEmpty) {
+        submissionsEmpty.textContent = "Sign in to see your submissions.";
+        submissionsEmpty.classList.remove("hidden");
+      }
+      setVisibility(submissionsTableWrapper, false);
+      return;
+    }
+
+    try {
+      const data = await fetchJSON(`/api/users/${state.user.id}/problems/${problem.id}/history`, { headers: authHeader() });
+      const items = data.items || [];
+      submissionItems = items;
+
+      if (!items.length) {
+        selectedSubmissionID = 0;
+        if (submissionsEmpty) {
+          submissionsEmpty.textContent = "No submissions yet.";
+          submissionsEmpty.classList.remove("hidden");
+        }
+        setVisibility(submissionsTableWrapper, false);
+        return;
+      }
+
+      if (selectedSubmissionID && !items.some((submission) => submission.id === selectedSubmissionID)) {
+        selectedSubmissionID = 0;
+      }
+
+      if (submissionsEmpty) submissionsEmpty.classList.add("hidden");
+      setVisibility(submissionsTableWrapper, true);
+      renderSubmissionsTable();
+
+      items.forEach((submission) => {
+        ensureSubmissionResult(submission.id).then((result) => {
+          if (result) {
+            renderSubmissionsTable();
+          }
+        });
+      });
+    } catch (err) {
+      if (submissionsEmpty) {
+        submissionsEmpty.textContent = "Failed to load submissions.";
+        submissionsEmpty.classList.remove("hidden");
+      }
+    }
+  };
+
+  const loadProblem = async () => {
+    try {
+      const data = await fetchJSON(`${API.problems}/${slug}`, { headers: authHeader() });
+      problem = data.problem || null;
+      if (!problem) {
+        setError(errorEl, "Problem not found.");
+        return;
+      }
+      if (breadcrumbEl) breadcrumbEl.textContent = problem.title || slug;
+      if (titleEl) titleEl.textContent = problem.title || "Problem";
+      setDifficultyBadge(problem.difficulty || "EASY");
+      if (tagsEl) {
+        const tags = Array.isArray(problem.tags) ? problem.tags : [];
+        tagsEl.innerHTML = tags.map((tag) => `<span class="mr-2">${escapeHTML(tag)}</span>`).join("");
+      }
+      if (statementEl) {
+        const statement = problem.statement?.markdown || "";
+        setMarkdownContent(statementEl, statement, "<p class=\"text-sm text-slate-500\">No statement yet.</p>");
+      }
+      renderExamples(problem.statement?.examples || []);
+      renderConstraints(problem.constraints || {});
+      renderHints(problem.editorial?.hints || [], hintsEl);
+      if (editorialEl) {
+        const editorialBody = problem.editorial?.markdown || "";
+        setMarkdownContent(editorialEl, editorialBody, "<p class=\"text-sm text-slate-500\">No editorial yet.</p>");
+      }
+      renderOfficialSolutions(problem.official_solutions || []);
+      renderHints(problem.editorial?.hints || [], editorialHintsEl);
+      initEditor();
+      applyTemplate(true);
+      setEditorMode();
+      await loadPromoIntoSlot({
+        slot: "PRACTICE_TOP",
+        container: promoSlotEl,
+        slotLabel: "Practice recommendation",
+        promoContext: {
+          entityType: "PROBLEM",
+          entityID: Number(problem.id || 0)
+        }
+      });
+      trackPracticeEvent("practice_problem_open", {
+        problem_slug: slug
+      });
+      if (stopPracticeTimeTracking) {
+        stopPracticeTimeTracking();
+      }
+      stopPracticeTimeTracking = startTimedEventTracking({
+        eventType: "practice_time_on_page",
+        entityType: "PROBLEM",
+        entityID: Number(problem.id || 0),
+        milestones: [15, 45, 90],
+        meta: {
+          problem_slug: slug
+        }
+      });
+    } catch (err) {
+      setError(errorEl, err.message || "Unable to load problem.");
+    }
+  };
+
+  if (page.dataset.practiceInitialized === "true") {
+    if (state.user) {
+      loadSubmissions();
+    }
+    return;
+  }
+  page.dataset.practiceInitialized = "true";
+  initializePracticeTheme();
+  startAIActionTicker();
+
+  tabButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setTab(button.dataset.problemTab);
+    });
+  });
+
+  if (languageSelect) {
+    languageSelect.addEventListener("change", () => {
+      setEditorMode();
+      if (!editorDirty) {
+        applyTemplate(true);
+      }
+    });
+  }
+  if (resetTemplateBtn) {
+    resetTemplateBtn.addEventListener("click", () => applyTemplate(true));
+  }
+  if (runBtn) runBtn.addEventListener("click", () => submitCode("RUN"));
+  if (submitBtn) submitBtn.addEventListener("click", () => submitCode("SUBMIT"));
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", () => {
+      const nextTheme = practiceTheme === "dark" ? "light" : "dark";
+      applyPracticeTheme(nextTheme);
+    });
+  }
+  if (aiActionBtn) {
+    aiActionBtn.addEventListener("click", () => {
+      if (!aiResultEl) return;
+      aiResultEl.classList.remove("hidden");
+      runAIAnalysis(currentSubmissionID, aiResultEl);
+    });
+  }
+  if (submissionsRefresh) submissionsRefresh.addEventListener("click", loadSubmissions);
+
+  setTab("description");
+  updateResultSummary(null);
+  await loadProblem();
+  if (state.user) {
+    await loadSubmissions();
   }
 };
 
@@ -366,12 +1524,13 @@ const renderTools = async () => {
   try {
     const data = await fetchJSON(API.tools, { headers: authHeader() });
     const items = listItemsFromResponse(data);
+    const staticCards = [renderOneSubDesktopToolCard()];
+    const dynamicCards = items.map(renderToolCard);
+    const allCards = [...staticCards, ...dynamicCards];
 
-    if (items.length === 0) {
-      grid.innerHTML = "<p class=\"col-span-full rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600\">No tools are available right now.</p>";
-    } else {
-      grid.innerHTML = items.map(renderToolCard).join("");
-    }
+    grid.innerHTML = allCards.length > 0
+      ? allCards.join("")
+      : "<p class=\"col-span-full rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600\">No tools are available right now.</p>";
     setVisibility(grid, true);
     animateIn(grid.children);
   } catch (err) {
@@ -442,12 +1601,18 @@ const renderPost = async () => {
     showLoginGate();
   }
   if (data.is_locked && data.gate?.type === "PAYWALL") {
+    sendEvents([{
+      type: "post_paywall_hit",
+      entity_type: "POST",
+      entity_id: Number(data.post?.id || 0),
+      meta: {}
+    }]);
     showPaywallGate();
   }
 
   const promoEligible = !data.is_locked && data.access_level === "TRIAL" && !data.entitlement_active;
   if (promoEligible) {
-    initPromoSlots("post", data.post.id);
+    initPromoSlots({ entityType: "POST", entityID: Number(data.post.id || 0) });
   }
 
   trackPostEngagement(data.post.id, { promoEligible });
@@ -483,8 +1648,42 @@ const renderCourse = async () => {
   state.course = course;
   const titleEl = document.getElementById("course-title");
   const descriptionEl = document.getElementById("course-description");
+  const promoSlotEl = document.getElementById("course-promo-slot");
   if (titleEl) titleEl.textContent = course.title || "Course";
   if (descriptionEl) descriptionEl.textContent = course.description || "";
+
+  await loadPromoIntoSlot({
+    slot: "COURSE_TOP",
+    container: promoSlotEl,
+    slotLabel: "Course recommendation",
+    promoContext: {
+      entityType: "COURSE",
+      entityID: Number(course.id || 0)
+    }
+  });
+
+  if (page.dataset.courseEngagementBound !== String(course.slug || "")) {
+    const courseID = Number(course.id || 0);
+    const openEvent = { type: "course_open", entity_type: "COURSE", meta: {} };
+    if (courseID > 0) {
+      openEvent.entity_id = courseID;
+    }
+    if (course.slug) {
+      openEvent.meta.course_slug = course.slug;
+    }
+    sendEvents([openEvent]);
+
+    startTimedEventTracking({
+      eventType: "course_time_on_page",
+      entityType: "COURSE",
+      entityID: courseID,
+      milestones: [15, 45, 90],
+      meta: {
+        course_slug: course.slug || ""
+      }
+    });
+    page.dataset.courseEngagementBound = String(course.slug || "");
+  }
 
   await initCourseExplorer({
     course,
@@ -509,6 +1708,7 @@ const initCourseExplorer = async ({ course }) => {
 
   let expandedModuleID = modules[0]?.id || 0;
   let selectedLessonSlug = course.selected_lesson_slug || findFirstUnlockedLessonSlug(modules);
+  let stopLessonTracking = null;
 
   const renderSidebar = () => {
     sidebar.innerHTML = modules
@@ -539,6 +1739,7 @@ const initCourseExplorer = async ({ course }) => {
     sidebar.querySelectorAll("[data-course-lesson]").forEach((button) => {
       button.addEventListener("click", async () => {
         const lessonSlug = button.dataset.courseLesson;
+        const lessonID = Number(button.dataset.courseLessonId || 0);
         const lessonLocked = button.dataset.courseLessonLocked === "true";
         if (!lessonSlug) return;
         if (lessonLocked) {
@@ -546,9 +1747,41 @@ const initCourseExplorer = async ({ course }) => {
           return;
         }
 
+        const lessonEvent = {
+          type: "course_lesson_click",
+          entity_type: "COURSE_LESSON",
+          meta: {
+            course_slug: course.slug || "",
+            lesson_slug: lessonSlug
+          }
+        };
+        if (lessonID > 0) {
+          lessonEvent.entity_id = lessonID;
+        }
+        sendEvents([lessonEvent]);
+
         selectedLessonSlug = lessonSlug;
         renderSidebar();
-        await loadCourseLessonContent(course.slug, lessonSlug, { body, lessonTitle, lessonMeta });
+        await loadCourseLessonContent(course.slug, lessonSlug, {
+          body,
+          lessonTitle,
+          lessonMeta,
+          onLessonLoaded: (lesson) => {
+            if (stopLessonTracking) {
+              stopLessonTracking();
+            }
+            stopLessonTracking = startTimedEventTracking({
+              eventType: "course_lesson_time_on_page",
+              entityType: "COURSE_LESSON",
+              entityID: Number(lesson.id || lessonID || 0),
+              milestones: [15, 45, 90],
+              meta: {
+                course_slug: course.slug || "",
+                lesson_slug: lesson.slug || lessonSlug
+              }
+            });
+          }
+        });
       });
     });
   };
@@ -562,7 +1795,26 @@ const initCourseExplorer = async ({ course }) => {
     return;
   }
 
-  await loadCourseLessonContent(course.slug, selectedLessonSlug, { body, lessonTitle, lessonMeta });
+  await loadCourseLessonContent(course.slug, selectedLessonSlug, {
+    body,
+    lessonTitle,
+    lessonMeta,
+    onLessonLoaded: (lesson) => {
+      if (stopLessonTracking) {
+        stopLessonTracking();
+      }
+      stopLessonTracking = startTimedEventTracking({
+        eventType: "course_lesson_time_on_page",
+        entityType: "COURSE_LESSON",
+        entityID: Number(lesson.id || 0),
+        milestones: [15, 45, 90],
+        meta: {
+          course_slug: course.slug || "",
+          lesson_slug: lesson.slug || selectedLessonSlug
+        }
+      });
+    }
+  });
 };
 
 const renderCourseLessonLink = (lesson, selectedLessonSlug) => {
@@ -572,7 +1824,8 @@ const renderCourseLessonLink = (lesson, selectedLessonSlug) => {
   const lockLabel = isLocked ? "Locked" : "Unlocked";
   const selectedClasses = isSelected ? "border-primary/60 bg-primary/5" : "border-slate-200 bg-white";
   return `
-    <button class="w-full rounded-xl border ${selectedClasses} px-3 py-2 text-left transition hover:border-primary/50" data-course-lesson="${lesson.slug}" data-course-lesson-locked="${isLocked}">
+    <button class="w-full rounded-xl border ${selectedClasses} px-3 py-2 text-left transition hover:border-primary/50"
+      data-course-lesson="${lesson.slug}" data-course-lesson-id="${Number(lesson.id || 0)}" data-course-lesson-locked="${isLocked}">
       <div class="flex items-center justify-between gap-2">
         <span class="text-sm text-slate-800">${lesson.title || "Lesson"}</span>
         <span class="text-xs text-slate-500">${lockIcon} ${lockLabel}</span>
@@ -612,6 +1865,9 @@ const loadCourseLessonContent = async (courseSlug, lessonSlug, elements) => {
     }
     if (elements.body) {
       elements.body.innerHTML = data.html || "";
+    }
+    if (typeof elements.onLessonLoaded === "function") {
+      elements.onLessonLoaded(lesson);
     }
   } catch (err) {
     if (err.status === 401) {
@@ -978,17 +2234,130 @@ const renderAdminProblems = async () => {
   const editorTitle = document.getElementById("problem-editor-title");
   const editorForm = document.getElementById("problem-editor");
   const resetBtn = document.getElementById("problem-reset");
+  const examplesList = document.getElementById("problem-examples-list");
+  const exampleAddBtn = document.getElementById("problem-example-add");
+  const ioModeSelect = document.getElementById("problem-io-mode");
+  const ioFunctionBlock = document.getElementById("problem-io-function");
+  const ioStdinBlock = document.getElementById("problem-io-stdin");
+  const ioFnName = document.getElementById("problem-io-fn-name");
+  const ioFnReturn = document.getElementById("problem-io-fn-return");
+  const ioSerializeInput = document.getElementById("problem-io-serialize-input");
+  const ioSerializeOutput = document.getElementById("problem-io-serialize-output");
+  const ioParamsList = document.getElementById("problem-io-params");
+  const ioParamAddBtn = document.getElementById("problem-io-param-add");
+  const ioStdinFormat = document.getElementById("problem-io-stdin-format");
+  const ioStdoutFormat = document.getElementById("problem-io-stdout-format");
+  const constraintTime = document.getElementById("problem-constraint-time");
+  const constraintMemory = document.getElementById("problem-constraint-memory");
+  const constraintOutput = document.getElementById("problem-constraint-output");
+  const constraintInputMD = document.getElementById("problem-constraint-input-md");
+  const constraintOutputMD = document.getElementById("problem-constraint-output-md");
+  const constraintLangsList = document.getElementById("problem-constraint-langs");
+  const constraintLangAddBtn = document.getElementById("problem-constraint-lang-add");
+  const solutionsList = document.getElementById("problem-solutions-list");
+  const solutionAddBtn = document.getElementById("problem-solution-add");
+
+  const datasetTypeSelect = document.getElementById("dataset-type");
+  const datasetScoringSelect = document.getElementById("dataset-scoring");
+  const datasetStopFirst = document.getElementById("dataset-stop-first");
+  const datasetMaxFailures = document.getElementById("dataset-max-failures");
+  const datasetMaxTests = document.getElementById("dataset-max-tests");
+  const datasetTestOrder = document.getElementById("dataset-test-order");
+  const datasetCollectArtifacts = document.getElementById("dataset-collect-artifacts");
+  const datasetValidatorType = document.getElementById("dataset-validator-type");
+  const datasetCreateBtn = document.getElementById("dataset-create");
+  const datasetsTable = document.getElementById("datasets-table");
+
+  const testcaseDatasetSelect = document.getElementById("testcase-dataset");
+  const testcaseInput = document.getElementById("testcase-input");
+  const testcaseOutput = document.getElementById("testcase-output");
+  const testcaseVisibility = document.getElementById("testcase-visibility");
+  const testcaseGroup = document.getElementById("testcase-group");
+  const testcaseWeight = document.getElementById("testcase-weight");
+  const testcasePosition = document.getElementById("testcase-position");
+  const testcaseValidatorType = document.getElementById("testcase-validator-type");
+  const testcaseCreateBtn = document.getElementById("testcase-create");
+  const testcasesTable = document.getElementById("testcases-table");
+
+  const listQueryInput = document.getElementById("problem-lists-admin-query");
+  const listRefreshBtn = document.getElementById("problem-lists-admin-refresh");
+  const listTable = document.getElementById("problem-lists-admin-table");
+  const listCreateBtn = document.getElementById("problem-list-create");
+  const listEditorTitle = document.getElementById("problem-list-editor-title");
+  const listEditorForm = document.getElementById("problem-list-editor");
+  const listIDInput = document.getElementById("problem-list-id");
+  const listNameInput = document.getElementById("problem-list-name");
+  const listSlugInput = document.getElementById("problem-list-slug");
+  const listDescriptionInput = document.getElementById("problem-list-description");
+  const listDefaultInput = document.getElementById("problem-list-default");
+  const listSelectedCount = document.getElementById("problem-list-selected-count");
+  const listSelectedContainer = document.getElementById("problem-list-selected");
+  const listAvailableContainer = document.getElementById("problem-list-available");
+  const listProblemSearchInput = document.getElementById("problem-list-problem-search");
+  const listResetBtn = document.getElementById("problem-list-reset");
+  const listDeleteBtn = document.getElementById("problem-list-delete");
+
+  let activeProblemID = 0;
+  let activeDatasetID = 0;
+  let listProblemOptions = [];
+  let selectedListProblemIDs = [];
+
+  const resetDatasetManager = () => {
+    activeDatasetID = 0;
+    const datasetType = datasetTypeSelect?.value || "PUBLIC";
+    const isHidden = datasetType === "HIDDEN";
+    if (datasetStopFirst) datasetStopFirst.checked = isHidden;
+    if (datasetMaxFailures) datasetMaxFailures.value = isHidden ? "1" : "2";
+    if (datasetMaxTests) datasetMaxTests.value = "";
+    if (datasetTestOrder) datasetTestOrder.value = "FAST_FIRST";
+    if (datasetCollectArtifacts) datasetCollectArtifacts.value = "MINIMAL";
+    if (datasetValidatorType) datasetValidatorType.value = "JSON_EQUIV";
+    if (datasetsTable) {
+      datasetsTable.innerHTML = "<tr><td class=\"py-4 text-slate-500\" colspan=\"4\">Save a problem to manage datasets.</td></tr>";
+    }
+    if (testcaseDatasetSelect) {
+      testcaseDatasetSelect.innerHTML = "<option value=\"\">Select a dataset</option>";
+    }
+    if (testcasesTable) {
+      testcasesTable.innerHTML = "<tr><td class=\"py-4 text-slate-500\" colspan=\"5\">Select a dataset to view testcases.</td></tr>";
+    }
+    if (testcaseInput) testcaseInput.value = "";
+    if (testcaseOutput) testcaseOutput.value = "";
+    if (testcaseValidatorType) testcaseValidatorType.value = "";
+    if (testcaseWeight) testcaseWeight.value = "";
+    if (testcasePosition) testcasePosition.value = "";
+    if (testcaseVisibility) testcaseVisibility.value = "PUBLIC";
+    if (testcaseGroup) testcaseGroup.value = "NORMAL";
+  };
 
   const resetEditor = () => {
     if (editorForm) editorForm.reset();
     document.getElementById("problem-id").value = "";
     document.getElementById("problem-difficulty").value = "EASY";
     document.getElementById("problem-status").value = "DRAFT";
-    document.getElementById("problem-examples").value = "[]";
-    document.getElementById("problem-io-spec").value = "{}";
-    document.getElementById("problem-constraints").value = "{}";
-    document.getElementById("problem-official-solutions").value = "[]";
+    if (examplesList) examplesList.innerHTML = "";
+    if (ioParamsList) ioParamsList.innerHTML = "";
+    if (constraintLangsList) constraintLangsList.innerHTML = "";
+    if (solutionsList) solutionsList.innerHTML = "";
+    if (ioModeSelect) ioModeSelect.value = "FUNCTION";
+    if (ioFnName) ioFnName.value = "";
+    if (ioFnReturn) ioFnReturn.value = "";
+    if (ioSerializeInput) ioSerializeInput.value = "JSON";
+    if (ioSerializeOutput) ioSerializeOutput.value = "JSON";
+    if (ioStdinFormat) ioStdinFormat.value = "";
+    if (ioStdoutFormat) ioStdoutFormat.value = "";
+    if (constraintTime) constraintTime.value = "";
+    if (constraintMemory) constraintMemory.value = "";
+    if (constraintOutput) constraintOutput.value = "";
+    if (constraintInputMD) constraintInputMD.value = "";
+    if (constraintOutputMD) constraintOutputMD.value = "";
     if (editorTitle) editorTitle.textContent = "New problem";
+    activeProblemID = 0;
+    resetDatasetManager();
+    setIOMode("FUNCTION");
+    if (examplesList) addExampleRow();
+    if (ioParamsList) addParamRow();
+    if (solutionsList) addSolutionRow();
   };
 
   const renderRow = (problem) => {
@@ -1058,39 +2427,439 @@ const renderAdminProblems = async () => {
       document.getElementById("problem-published").value = formatDate(problem.published_at);
       document.getElementById("problem-tags").value = (problem.tags || []).join(", ");
       document.getElementById("problem-statement").value = statement.markdown || "";
-      document.getElementById("problem-examples").value = formatJSON(statement.examples, "[]");
       document.getElementById("problem-notes").value = (statement.notes || []).join(", ");
-      document.getElementById("problem-io-spec").value = formatJSON(problem.io_spec, "{}");
-      document.getElementById("problem-constraints").value = formatJSON(problem.constraints, "{}");
       document.getElementById("problem-editorial").value = editorial.markdown || "";
       document.getElementById("problem-hints").value = (editorial.hints || []).join(", ");
-      document.getElementById("problem-official-solutions").value = formatJSON(problem.official_solutions, "[]");
+
+      if (examplesList) {
+        examplesList.innerHTML = "";
+        const examples = Array.isArray(statement.examples) ? statement.examples : [];
+        if (examples.length) {
+          examples.forEach((example) => addExampleRow(example));
+        } else {
+          addExampleRow();
+        }
+      }
+
+      if (ioParamsList) ioParamsList.innerHTML = "";
+      const ioSpec = problem.io_spec || {};
+      const ioMode = String(ioSpec.mode || "FUNCTION").toUpperCase();
+      setIOMode(ioMode);
+      if (ioMode === "STDIN") {
+        if (ioFnName) ioFnName.value = "";
+        if (ioFnReturn) ioFnReturn.value = "";
+        if (ioStdinFormat) ioStdinFormat.value = ioSpec.stdin_format_markdown || "";
+        if (ioStdoutFormat) ioStdoutFormat.value = ioSpec.stdout_format_markdown || "";
+      } else {
+        const fnSpec = ioSpec.function || {};
+        if (ioFnName) ioFnName.value = fnSpec.name || "";
+        if (ioFnReturn) ioFnReturn.value = fnSpec.return_type || "";
+        if (ioSerializeInput) ioSerializeInput.value = ioSpec.serialization?.input || "JSON";
+        if (ioSerializeOutput) ioSerializeOutput.value = ioSpec.serialization?.output || "JSON";
+        const params = Array.isArray(fnSpec.params) ? fnSpec.params : [];
+        if (params.length) {
+          params.forEach((param) => addParamRow(param));
+        } else {
+          addParamRow();
+        }
+      }
+
+      const constraints = problem.constraints || {};
+      if (constraintTime) constraintTime.value = constraints.time_limit_ms || "";
+      if (constraintMemory) constraintMemory.value = constraints.memory_limit_kb || "";
+      if (constraintOutput) constraintOutput.value = constraints.output_limit_kb || "";
+      if (constraintInputMD) constraintInputMD.value = constraints.input_constraints_markdown || "";
+      if (constraintOutputMD) constraintOutputMD.value = constraints.output_constraints_markdown || "";
+      if (constraintLangsList) {
+        constraintLangsList.innerHTML = "";
+        const languages = constraints.languages || {};
+        const entries = Object.entries(languages || {});
+        if (entries.length) {
+          entries.forEach(([key, value]) => addConstraintLanguageRow(key, value || {}));
+        }
+      }
+
+      if (solutionsList) {
+        solutionsList.innerHTML = "";
+        const solutions = Array.isArray(problem.official_solutions) ? problem.official_solutions : [];
+        if (solutions.length) {
+          solutions.forEach((solution) => addSolutionRow(solution));
+        } else {
+          addSolutionRow();
+        }
+      }
       if (editorTitle) editorTitle.textContent = `Editing: ${problem.title || "Problem"}`;
+      activeProblemID = Number(problem.id || 0);
+      await loadDatasets(activeProblemID);
     } catch (err) {
       setError(errorEl, err.message || "Failed to load problem details.");
     }
   };
 
-  const parseJSONField = (value, label, fallback) => {
-    const trimmed = String(value || "").trim();
-    if (!trimmed) return { value: fallback, error: null };
+  const toOptionalInt = (value) => {
+    const parsed = Number.parseInt(String(value || "").trim(), 10);
+    if (!Number.isFinite(parsed)) return null;
+    return parsed;
+  };
+
+  const setIOMode = (mode) => {
+    const normalized = String(mode || "FUNCTION").toUpperCase();
+    if (ioModeSelect) ioModeSelect.value = normalized;
+    setVisibility(ioFunctionBlock, normalized !== "STDIN");
+    setVisibility(ioStdinBlock, normalized === "STDIN");
+  };
+
+  const addExampleRow = (example = {}) => {
+    if (!examplesList) return;
+    const row = document.createElement("div");
+    row.className = "rounded-2xl border border-slate-200 bg-white p-3 space-y-2";
+    row.dataset.exampleRow = "true";
+    row.innerHTML = `
+      <textarea data-example-input rows="2" placeholder="Input" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700"></textarea>
+      <textarea data-example-output rows="2" placeholder="Output" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700"></textarea>
+      <input data-example-explanation placeholder="Explanation (optional)" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+      <div class="flex justify-end">
+        <button type="button" class="text-xs text-rose-600" data-example-remove>Remove</button>
+      </div>
+    `;
+    row.querySelector("[data-example-input]").value = example.input || "";
+    row.querySelector("[data-example-output]").value = example.output || "";
+    row.querySelector("[data-example-explanation]").value = example.explanation || "";
+    examplesList.appendChild(row);
+  };
+
+  const addParamRow = (param = {}) => {
+    if (!ioParamsList) return;
+    const row = document.createElement("div");
+    row.className = "grid gap-2 md:grid-cols-[1fr_1fr_auto]";
+    row.dataset.paramRow = "true";
+    row.innerHTML = `
+      <input data-param-name placeholder="Param name" class="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+      <input data-param-type placeholder="Type (e.g. int[])" class="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+      <button type="button" class="text-xs text-rose-600" data-param-remove>Remove</button>
+    `;
+    row.querySelector("[data-param-name]").value = param.name || "";
+    row.querySelector("[data-param-type]").value = param.type || "";
+    ioParamsList.appendChild(row);
+  };
+
+  const addConstraintLanguageRow = (langKey = "", limits = {}) => {
+    if (!constraintLangsList) return;
+    const row = document.createElement("div");
+    row.className = "grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]";
+    row.dataset.langRow = "true";
+    row.innerHTML = `
+      <input data-lang-key placeholder="Language (e.g. go)" class="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+      <input data-lang-time type="number" placeholder="Time ms" class="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+      <input data-lang-memory type="number" placeholder="Memory KB" class="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+      <input data-lang-output type="number" placeholder="Output KB" class="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+      <button type="button" class="text-xs text-rose-600" data-lang-remove>Remove</button>
+    `;
+    row.querySelector("[data-lang-key]").value = langKey || "";
+    row.querySelector("[data-lang-time]").value = limits.time_limit_ms || "";
+    row.querySelector("[data-lang-memory]").value = limits.memory_limit_kb || "";
+    row.querySelector("[data-lang-output]").value = limits.output_limit_kb || "";
+    constraintLangsList.appendChild(row);
+  };
+
+  const addSolutionRow = (solution = {}) => {
+    if (!solutionsList) return;
+    const row = document.createElement("div");
+    row.className = "rounded-2xl border border-slate-200 bg-white p-3 space-y-2";
+    row.dataset.solutionRow = "true";
+    row.innerHTML = `
+      <div class="flex items-center justify-between gap-3">
+        <select data-solution-language class="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">
+          <option value="go">Go</option>
+          <option value="c">C</option>
+          <option value="cpp">C++</option>
+          <option value="java">Java</option>
+          <option value="py">Python</option>
+        </select>
+        <button type="button" class="text-xs text-rose-600" data-solution-remove>Remove</button>
+      </div>
+      <textarea data-solution-code rows="3" placeholder="Solution code" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700"></textarea>
+      <div class="grid gap-2 md:grid-cols-2">
+        <input data-solution-time placeholder="Time complexity (e.g. O(n))" class="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+        <input data-solution-space placeholder="Space complexity (e.g. O(n))" class="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+      </div>
+      <input data-solution-summary placeholder="Approach summary" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+    `;
+    row.querySelector("[data-solution-language]").value = solution.language || "go";
+    row.querySelector("[data-solution-code]").value = solution.code || "";
+    row.querySelector("[data-solution-time]").value = solution.complexity?.time || "";
+    row.querySelector("[data-solution-space]").value = solution.complexity?.space || "";
+    row.querySelector("[data-solution-summary]").value = solution.approach_summary || "";
+    solutionsList.appendChild(row);
+  };
+
+  const collectExamples = () => {
+    if (!examplesList) return [];
+    const rows = Array.from(examplesList.querySelectorAll("[data-example-row]"));
+    return rows
+      .map((row) => {
+        const input = row.querySelector("[data-example-input]")?.value.trim() || "";
+        const output = row.querySelector("[data-example-output]")?.value.trim() || "";
+        const explanation = row.querySelector("[data-example-explanation]")?.value.trim() || "";
+        if (!input && !output && !explanation) return null;
+        return { input, output, explanation };
+      })
+      .filter(Boolean);
+  };
+
+  const collectParams = () => {
+    if (!ioParamsList) return [];
+    const rows = Array.from(ioParamsList.querySelectorAll("[data-param-row]"));
+    return rows
+      .map((row) => {
+        const name = row.querySelector("[data-param-name]")?.value.trim() || "";
+        const type = row.querySelector("[data-param-type]")?.value.trim() || "";
+        if (!name && !type) return null;
+        return { name, type };
+      })
+      .filter(Boolean);
+  };
+
+  const collectLanguageOverrides = () => {
+    if (!constraintLangsList) return {};
+    const rows = Array.from(constraintLangsList.querySelectorAll("[data-lang-row]"));
+    const output = {};
+    rows.forEach((row) => {
+      const key = row.querySelector("[data-lang-key]")?.value.trim().toLowerCase();
+      if (!key) return;
+      const timeLimit = toOptionalInt(row.querySelector("[data-lang-time]")?.value);
+      const memoryLimit = toOptionalInt(row.querySelector("[data-lang-memory]")?.value);
+      const outputLimit = toOptionalInt(row.querySelector("[data-lang-output]")?.value);
+      const entry = {};
+      if (timeLimit !== null) entry.time_limit_ms = timeLimit;
+      if (memoryLimit !== null) entry.memory_limit_kb = memoryLimit;
+      if (outputLimit !== null) entry.output_limit_kb = outputLimit;
+      output[key] = entry;
+    });
+    return output;
+  };
+
+  const collectSolutions = () => {
+    if (!solutionsList) return [];
+    const rows = Array.from(solutionsList.querySelectorAll("[data-solution-row]"));
+    return rows
+      .map((row) => {
+        const language = row.querySelector("[data-solution-language]")?.value || "";
+        const code = row.querySelector("[data-solution-code]")?.value.trim() || "";
+        const time = row.querySelector("[data-solution-time]")?.value.trim() || "";
+        const space = row.querySelector("[data-solution-space]")?.value.trim() || "";
+        const summary = row.querySelector("[data-solution-summary]")?.value.trim() || "";
+        if (!language && !code && !summary) return null;
+        const entry = { language, code, approach_summary: summary };
+        if (time || space) {
+          entry.complexity = { time, space };
+        }
+        return entry;
+      })
+      .filter(Boolean);
+  };
+
+  const buildIOSpec = () => {
+    const mode = String(ioModeSelect?.value || "FUNCTION").toUpperCase();
+    if (mode === "STDIN") {
+      return {
+        mode: "STDIN",
+        stdin_format_markdown: ioStdinFormat?.value.trim() || "",
+        stdout_format_markdown: ioStdoutFormat?.value.trim() || ""
+      };
+    }
+    const params = collectParams();
+    const spec = {
+      mode: "FUNCTION",
+      function: {
+        name: ioFnName?.value.trim() || "",
+        return_type: ioFnReturn?.value.trim() || "",
+        params
+      }
+    };
+    const inputSerialization = ioSerializeInput?.value.trim() || "";
+    const outputSerialization = ioSerializeOutput?.value.trim() || "";
+    if (inputSerialization || outputSerialization) {
+      spec.serialization = {
+        input: inputSerialization,
+        output: outputSerialization
+      };
+    }
+    return spec;
+  };
+
+  const buildConstraints = () => {
+    const constraints = {};
+    const timeLimit = toOptionalInt(constraintTime?.value);
+    const memoryLimit = toOptionalInt(constraintMemory?.value);
+    const outputLimit = toOptionalInt(constraintOutput?.value);
+    if (timeLimit !== null) constraints.time_limit_ms = timeLimit;
+    if (memoryLimit !== null) constraints.memory_limit_kb = memoryLimit;
+    if (outputLimit !== null) constraints.output_limit_kb = outputLimit;
+    const inputMD = constraintInputMD?.value.trim() || "";
+    const outputMD = constraintOutputMD?.value.trim() || "";
+    if (inputMD) constraints.input_constraints_markdown = inputMD;
+    if (outputMD) constraints.output_constraints_markdown = outputMD;
+    const languages = collectLanguageOverrides();
+    if (Object.keys(languages).length > 0) {
+      constraints.languages = languages;
+    }
+    return constraints;
+  };
+
+  const renderDatasetRow = (dataset) => {
+    return `
+      <tr>
+        <td class="py-3 text-slate-700">${dataset.id}</td>
+        <td class="py-3 text-slate-600">${dataset.type}</td>
+        <td class="py-3 text-slate-600">${dataset.scoring_mode}</td>
+        <td class="py-3 text-right">
+          <button class="text-primary" data-view-dataset="${dataset.id}">Testcases</button>
+          <button class="ml-3 text-rose-600" data-delete-dataset="${dataset.id}">Delete</button>
+        </td>
+      </tr>
+    `;
+  };
+
+  const renderTestcaseRow = (testcase) => {
+    const inputPreview = escapeHTML(String(testcase.input || "")).slice(0, 60);
+    return `
+      <tr>
+        <td class="py-3 text-slate-700">${testcase.id}</td>
+        <td class="py-3 text-slate-600">${testcase.visibility}</td>
+        <td class="py-3 text-slate-600">${testcase.group || "NORMAL"}</td>
+        <td class="py-3 text-slate-600">${inputPreview}</td>
+        <td class="py-3 text-right">
+          <button class="text-rose-600" data-delete-testcase="${testcase.id}">Delete</button>
+        </td>
+      </tr>
+    `;
+  };
+
+  const loadDatasets = async (problemID) => {
+    if (!datasetsTable) return;
+    if (!problemID) {
+      resetDatasetManager();
+      return;
+    }
     try {
-      return { value: JSON.parse(trimmed), error: null };
+      const data = await fetchJSON(`/api/admin/problems/${problemID}/datasets`);
+      const items = data.items || [];
+      if (items.length === 0) {
+        datasetsTable.innerHTML = "<tr><td class=\"py-4 text-slate-500\" colspan=\"4\">No datasets yet.</td></tr>";
+      } else {
+        datasetsTable.innerHTML = items.map(renderDatasetRow).join("");
+      }
+      if (testcaseDatasetSelect) {
+        testcaseDatasetSelect.innerHTML = `<option value="">Select a dataset</option>${items
+          .map((dataset) => `<option value="${dataset.id}">${dataset.type} #${dataset.id}</option>`)
+          .join("")}`;
+      }
+      datasetsTable.querySelectorAll("[data-view-dataset]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const datasetID = Number(button.dataset.viewDataset || 0);
+          if (datasetID) {
+            activeDatasetID = datasetID;
+            if (testcaseDatasetSelect) testcaseDatasetSelect.value = String(datasetID);
+            loadTestcases(datasetID);
+          }
+        });
+      });
+      datasetsTable.querySelectorAll("[data-delete-dataset]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const datasetID = Number(button.dataset.deleteDataset || 0);
+          if (!datasetID) return;
+          if (!confirm("Delete this dataset and its testcases?")) return;
+          await fetchJSON(`/api/admin/datasets/${datasetID}`, { method: "DELETE" });
+          showToast("Dataset deleted");
+          await loadDatasets(problemID);
+        });
+      });
     } catch (err) {
-      return { value: null, error: `${label} must be valid JSON.` };
+      setError(errorEl, err.message || "Failed to load datasets.");
     }
   };
 
-  const buildProblemPayload = () => {
-    const examplesResult = parseJSONField(document.getElementById("problem-examples").value, "Examples", []);
-    if (examplesResult.error) return { error: examplesResult.error };
-    const ioSpecResult = parseJSONField(document.getElementById("problem-io-spec").value, "IO spec", {});
-    if (ioSpecResult.error) return { error: ioSpecResult.error };
-    const constraintsResult = parseJSONField(document.getElementById("problem-constraints").value, "Constraints", {});
-    if (constraintsResult.error) return { error: constraintsResult.error };
-    const solutionsResult = parseJSONField(document.getElementById("problem-official-solutions").value, "Official solutions", []);
-    if (solutionsResult.error) return { error: solutionsResult.error };
+  const loadTestcases = async (datasetID) => {
+    if (!testcasesTable) return;
+    if (!datasetID) {
+      testcasesTable.innerHTML = "<tr><td class=\"py-4 text-slate-500\" colspan=\"5\">Select a dataset to view testcases.</td></tr>";
+      return;
+    }
+    try {
+      const data = await fetchJSON(`/api/admin/datasets/${datasetID}/testcases`);
+      const items = data.items || [];
+      if (items.length === 0) {
+        testcasesTable.innerHTML = "<tr><td class=\"py-4 text-slate-500\" colspan=\"5\">No testcases yet.</td></tr>";
+      } else {
+        testcasesTable.innerHTML = items.map(renderTestcaseRow).join("");
+      }
+      testcasesTable.querySelectorAll("[data-delete-testcase]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const testcaseID = Number(button.dataset.deleteTestcase || 0);
+          if (!testcaseID) return;
+          if (!confirm("Delete this testcase?")) return;
+          await fetchJSON(`/api/admin/testcases/${testcaseID}`, { method: "DELETE" });
+          showToast("Testcase deleted");
+          await loadTestcases(datasetID);
+        });
+      });
+    } catch (err) {
+      setError(errorEl, err.message || "Failed to load testcases.");
+    }
+  };
 
+  const buildDatasetPayload = () => {
+    const policy = {
+      stop_on_first_failure: Boolean(datasetStopFirst?.checked),
+      test_order: datasetTestOrder?.value || "FAST_FIRST",
+      collect_failure_artifacts: datasetCollectArtifacts?.value || "MINIMAL"
+    };
+    const maxFailures = toOptionalInt(datasetMaxFailures?.value);
+    const maxTests = toOptionalInt(datasetMaxTests?.value);
+    if (maxFailures !== null) policy.max_failures = maxFailures;
+    if (maxTests !== null) policy.max_tests_to_run = maxTests;
+
+    const validatorType = datasetValidatorType?.value || "JSON_EQUIV";
+
+    return {
+      payload: {
+        type: datasetTypeSelect?.value || "PUBLIC",
+        scoring_mode: datasetScoringSelect?.value || "BINARY",
+        execution_policy: policy,
+        validator_default: { type: validatorType }
+      },
+      error: null
+    };
+  };
+
+  const buildTestcasePayload = () => {
+    const weightValue = Number.parseInt(testcaseWeight?.value || "", 10);
+    const positionValue = Number.parseInt(testcasePosition?.value || "", 10);
+    const validatorType = testcaseValidatorType?.value || "";
+    const validatorOverride = validatorType ? { type: validatorType } : null;
+
+    return {
+      payload: {
+        input: testcaseInput?.value || "",
+        expected_output: testcaseOutput?.value || "",
+        visibility: testcaseVisibility?.value || "PUBLIC",
+        weight: Number.isNaN(weightValue) ? null : weightValue,
+        group: testcaseGroup?.value || "NORMAL",
+        position: Number.isNaN(positionValue) ? null : positionValue,
+        validator_override: validatorOverride
+      },
+      error: null
+    };
+  };
+
+  const resolveActiveProblemID = () => {
+    const fromInput = Number(document.getElementById("problem-id").value || 0);
+    if (fromInput) return fromInput;
+    return Number(activeProblemID || 0);
+  };
+
+  const buildProblemPayload = () => {
     const publishedRaw = document.getElementById("problem-published").value;
     return {
       payload: {
@@ -1100,28 +2869,432 @@ const renderAdminProblems = async () => {
         status: document.getElementById("problem-status").value,
         statement: {
           markdown: document.getElementById("problem-statement").value.trim(),
-          examples: examplesResult.value,
+          examples: collectExamples(),
           notes: splitTags(document.getElementById("problem-notes").value)
         },
-        io_spec: ioSpecResult.value,
-        constraints: constraintsResult.value,
+        io_spec: buildIOSpec(),
+        constraints: buildConstraints(),
         tags: splitTags(document.getElementById("problem-tags").value),
         editorial: {
           markdown: document.getElementById("problem-editorial").value.trim(),
           hints: splitTags(document.getElementById("problem-hints").value)
         },
-        official_solutions: solutionsResult.value,
+        official_solutions: collectSolutions(),
         published_at: toISODate(publishedRaw)
       },
       error: null
     };
   };
 
+  const buildListProblemIndex = () => {
+    const index = new Map();
+    listProblemOptions.forEach((problem) => {
+      index.set(Number(problem.id), problem);
+    });
+    return index;
+  };
+
+  const renderSelectedListProblems = () => {
+    if (!listSelectedContainer) return;
+    const problemIndex = buildListProblemIndex();
+    if (!selectedListProblemIDs.length) {
+      listSelectedContainer.innerHTML = "<p class=\"rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-500\">No problems selected yet.</p>";
+      if (listSelectedCount) listSelectedCount.textContent = "0 selected";
+      return;
+    }
+
+    listSelectedContainer.innerHTML = selectedListProblemIDs
+      .map((problemID) => {
+        const problem = problemIndex.get(problemID);
+        if (!problem) return "";
+        return `
+          <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <div class="min-w-0">
+              <p class="truncate text-sm font-semibold text-slate-800">${escapeHTML(problem.title || "Problem")}</p>
+              <p class="text-xs text-slate-500">${escapeHTML(problem.difficulty || "EASY")}</p>
+            </div>
+            <button type="button" class="shrink-0 text-xs text-rose-600" data-list-remove-problem="${problem.id}">Remove</button>
+          </div>
+        `;
+      })
+      .join("");
+
+    if (listSelectedCount) {
+      listSelectedCount.textContent = `${selectedListProblemIDs.length} selected`;
+    }
+  };
+
+  const buildAvailableProblemMarkup = (problem) => {
+    const tags = Array.isArray(problem.tags) ? problem.tags : [];
+    const isSelected = selectedListProblemIDs.includes(Number(problem.id));
+    const actionLabel = isSelected ? "Added" : "Add";
+    const actionClass = isSelected ? "text-emerald-600" : "text-primary";
+
+    return `
+      <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+        <div class="min-w-0">
+          <p class="truncate text-sm font-semibold text-slate-800">${escapeHTML(problem.title || "Problem")}</p>
+          <p class="text-xs text-slate-500">${escapeHTML(problem.difficulty || "EASY")} · ${escapeHTML((tags || []).slice(0, 3).join(", "))}</p>
+        </div>
+        <button type="button" class="shrink-0 text-xs ${actionClass}" data-list-add-problem="${problem.id}">
+          ${actionLabel}
+        </button>
+      </div>
+    `;
+  };
+
+  const renderAvailableListProblems = () => {
+    if (!listAvailableContainer) return;
+    const searchTerm = String(listProblemSearchInput?.value || "").trim().toLowerCase();
+
+    const filteredProblems = listProblemOptions.filter((problem) => {
+      const tags = Array.isArray(problem.tags) ? problem.tags.join(" ") : "";
+      const haystack = `${problem.title || ""} ${problem.slug || ""} ${tags}`.toLowerCase();
+      return !searchTerm || haystack.includes(searchTerm);
+    });
+
+    if (!filteredProblems.length) {
+      listAvailableContainer.innerHTML = "<p class=\"rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-500\">No matching problems found.</p>";
+      return;
+    }
+
+    listAvailableContainer.innerHTML = filteredProblems.map(buildAvailableProblemMarkup).join("");
+  };
+
+  const refreshListProblemPicker = () => {
+    renderSelectedListProblems();
+    renderAvailableListProblems();
+  };
+
+  const resetListEditor = () => {
+    if (listEditorForm) listEditorForm.reset();
+    if (listIDInput) listIDInput.value = "";
+    if (listEditorTitle) listEditorTitle.textContent = "Create list";
+    if (listDefaultInput) listDefaultInput.checked = false;
+    selectedListProblemIDs = [];
+    refreshListProblemPicker();
+    if (listDeleteBtn) listDeleteBtn.classList.add("hidden");
+  };
+
+  const renderProblemListTableRow = (list) => {
+    return `
+      <tr>
+        <td class="py-3 text-slate-800">
+          <div class="font-semibold">${escapeHTML(list.name || "List")}</div>
+          <div class="text-xs text-slate-500">${escapeHTML(list.slug || "")}</div>
+        </td>
+        <td class="py-3 text-slate-600">${Number(list.problem_count || 0)}</td>
+        <td class="py-3 text-slate-600">${formatDate(list.updated_at)}</td>
+        <td class="py-3 text-right">
+          <button type="button" class="text-primary" data-edit-problem-list="${list.id}">Edit</button>
+        </td>
+      </tr>
+    `;
+  };
+
+  const loadProblemLists = async () => {
+    if (!listTable) return;
+    try {
+      const params = new URLSearchParams();
+      if (listQueryInput?.value) {
+        params.set("q", listQueryInput.value.trim());
+      }
+      const query = params.toString();
+      const url = query ? `/api/admin/problem-lists?${query}` : "/api/admin/problem-lists";
+      const data = await fetchJSON(url);
+      const items = data.items || [];
+      if (!items.length) {
+        listTable.innerHTML = "<tr><td class=\"py-4 text-slate-500\" colspan=\"4\">No lists yet.</td></tr>";
+        return;
+      }
+      listTable.innerHTML = items.map(renderProblemListTableRow).join("");
+      listTable.querySelectorAll("[data-edit-problem-list]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const listID = Number(button.dataset.editProblemList || 0);
+          if (listID) loadProblemListDetail(listID);
+        });
+      });
+    } catch (err) {
+      setError(errorEl, err.message || "Failed to load problem lists.");
+    }
+  };
+
+  const loadProblemListDetail = async (listID) => {
+    if (!listID) return;
+    try {
+      clearError(errorEl);
+      const data = await fetchJSON(`/api/admin/problem-lists/${listID}`);
+      const list = data.list || {};
+      if (listIDInput) listIDInput.value = String(list.id || "");
+      if (listNameInput) listNameInput.value = list.name || "";
+      if (listSlugInput) listSlugInput.value = list.slug || "";
+      if (listDescriptionInput) listDescriptionInput.value = list.description || "";
+      if (listDefaultInput) listDefaultInput.checked = Boolean(list.is_default);
+      selectedListProblemIDs = Array.isArray(list.problem_ids)
+        ? list.problem_ids.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0)
+        : [];
+      if (listEditorTitle) listEditorTitle.textContent = `Edit list: ${list.name || "List"}`;
+      if (listDeleteBtn) listDeleteBtn.classList.remove("hidden");
+      refreshListProblemPicker();
+    } catch (err) {
+      setError(errorEl, err.message || "Failed to load list details.");
+    }
+  };
+
+  const fetchAllProblemOptions = async () => {
+    const options = [];
+    let page = 0;
+    const pageSize = 100;
+
+    while (page < 20) {
+      const data = await fetchJSON(`/api/admin/problems?page=${page}&page_size=${pageSize}`);
+      const items = data.items || [];
+      options.push(...items);
+      if (items.length < pageSize) break;
+      page += 1;
+    }
+
+    return options;
+  };
+
+  const loadProblemOptions = async () => {
+    try {
+      listProblemOptions = await fetchAllProblemOptions();
+      refreshListProblemPicker();
+    } catch (err) {
+      setError(errorEl, err.message || "Failed to load problem options.");
+    }
+  };
+
+  const addProblemToList = (problemID) => {
+    if (!problemID) return;
+    if (selectedListProblemIDs.includes(problemID)) return;
+    selectedListProblemIDs = [...selectedListProblemIDs, problemID];
+    refreshListProblemPicker();
+  };
+
+  const removeProblemFromList = (problemID) => {
+    selectedListProblemIDs = selectedListProblemIDs.filter((id) => id !== problemID);
+    refreshListProblemPicker();
+  };
+
+  if (listCreateBtn) {
+    listCreateBtn.addEventListener("click", () => {
+      resetListEditor();
+      clearError(errorEl);
+    });
+  }
+
+  if (listRefreshBtn) listRefreshBtn.addEventListener("click", loadProblemLists);
+  if (listQueryInput) listQueryInput.addEventListener("change", loadProblemLists);
+  if (listProblemSearchInput) listProblemSearchInput.addEventListener("input", renderAvailableListProblems);
+  if (listResetBtn) listResetBtn.addEventListener("click", resetListEditor);
+
+  if (listSelectedContainer) {
+    listSelectedContainer.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-list-remove-problem]");
+      if (!button) return;
+      const problemID = Number(button.dataset.listRemoveProblem || 0);
+      if (!problemID) return;
+      removeProblemFromList(problemID);
+    });
+  }
+
+  if (listAvailableContainer) {
+    listAvailableContainer.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-list-add-problem]");
+      if (!button) return;
+      const problemID = Number(button.dataset.listAddProblem || 0);
+      if (!problemID) return;
+      if (selectedListProblemIDs.includes(problemID)) {
+        removeProblemFromList(problemID);
+        return;
+      }
+      addProblemToList(problemID);
+    });
+  }
+
+  if (listDeleteBtn) {
+    listDeleteBtn.addEventListener("click", async () => {
+      const listID = Number(listIDInput?.value || 0);
+      if (!listID) return;
+      if (!confirm("Delete this list?")) return;
+      try {
+        await fetchJSON(`/api/admin/problem-lists/${listID}`, { method: "DELETE" });
+        showToast("List deleted");
+        resetListEditor();
+        await loadProblemLists();
+      } catch (err) {
+        setError(errorEl, err.message || "Failed to delete list.");
+      }
+    });
+  }
+
+  if (listEditorForm) {
+    listEditorForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError(errorEl);
+
+      const name = listNameInput?.value.trim() || "";
+      if (!name) {
+        setError(errorEl, "List name is required.");
+        return;
+      }
+
+      const payload = {
+        name,
+        slug: listSlugInput?.value.trim() || "",
+        description: listDescriptionInput?.value.trim() || "",
+        problem_ids: selectedListProblemIDs,
+        is_default: Boolean(listDefaultInput?.checked)
+      };
+
+      const listID = Number(listIDInput?.value || 0);
+      const method = listID ? "PUT" : "POST";
+      const url = listID ? `/api/admin/problem-lists/${listID}` : "/api/admin/problem-lists";
+
+      try {
+        const response = await fetchJSON(url, {
+          method,
+          body: JSON.stringify(payload)
+        });
+        showToast("List saved");
+        const savedListID = Number(response?.list?.id || listID || 0);
+        await loadProblemLists();
+        if (savedListID) {
+          await loadProblemListDetail(savedListID);
+        } else {
+          resetListEditor();
+        }
+      } catch (err) {
+        setError(errorEl, err.message || "Failed to save list.");
+      }
+    });
+  }
+
   if (refreshBtn) refreshBtn.addEventListener("click", loadProblems);
   if (queryInput) queryInput.addEventListener("change", loadProblems);
   if (statusSelect) statusSelect.addEventListener("change", loadProblems);
   if (difficultySelect) difficultySelect.addEventListener("change", loadProblems);
   if (resetBtn) resetBtn.addEventListener("click", resetEditor);
+  if (ioModeSelect) {
+    ioModeSelect.addEventListener("change", () => setIOMode(ioModeSelect.value));
+  }
+  if (datasetTypeSelect) {
+    datasetTypeSelect.addEventListener("change", () => {
+      const isHidden = datasetTypeSelect.value === "HIDDEN";
+      if (datasetStopFirst) datasetStopFirst.checked = isHidden;
+      if (datasetMaxFailures && !datasetMaxFailures.value) {
+        datasetMaxFailures.value = isHidden ? "1" : "2";
+      }
+    });
+  }
+  if (exampleAddBtn) exampleAddBtn.addEventListener("click", () => addExampleRow());
+  if (ioParamAddBtn) ioParamAddBtn.addEventListener("click", () => addParamRow());
+  if (constraintLangAddBtn) constraintLangAddBtn.addEventListener("click", () => addConstraintLanguageRow());
+  if (solutionAddBtn) solutionAddBtn.addEventListener("click", () => addSolutionRow());
+
+  if (examplesList) {
+    examplesList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-example-remove]");
+      if (!button) return;
+      button.closest("[data-example-row]")?.remove();
+    });
+  }
+
+  if (ioParamsList) {
+    ioParamsList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-param-remove]");
+      if (!button) return;
+      button.closest("[data-param-row]")?.remove();
+    });
+  }
+
+  if (constraintLangsList) {
+    constraintLangsList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-lang-remove]");
+      if (!button) return;
+      button.closest("[data-lang-row]")?.remove();
+    });
+  }
+
+  if (solutionsList) {
+    solutionsList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-solution-remove]");
+      if (!button) return;
+      button.closest("[data-solution-row]")?.remove();
+    });
+  }
+
+  if (datasetCreateBtn) {
+    datasetCreateBtn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      clearError(errorEl);
+      const problemID = resolveActiveProblemID();
+      if (!problemID) {
+        setError(errorEl, "Save the problem before adding datasets.");
+        return;
+      }
+      const result = buildDatasetPayload();
+      if (result.error) {
+        setError(errorEl, result.error);
+        return;
+      }
+      try {
+        await fetchJSON(`/api/admin/problems/${problemID}/datasets`, {
+          method: "POST",
+          body: JSON.stringify(result.payload)
+        });
+        showToast("Dataset added");
+        await loadDatasets(problemID);
+      } catch (err) {
+        setError(errorEl, err.message || "Failed to add dataset.");
+      }
+    });
+  }
+
+  if (testcaseCreateBtn) {
+    testcaseCreateBtn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      clearError(errorEl);
+      const datasetID = Number(testcaseDatasetSelect?.value || activeDatasetID || 0);
+      if (!datasetID) {
+        setError(errorEl, "Select a dataset before adding testcases.");
+        return;
+      }
+      const result = buildTestcasePayload();
+      if (result.error) {
+        setError(errorEl, result.error);
+        return;
+      }
+      if (!result.payload.input.trim() || !result.payload.expected_output.trim()) {
+        setError(errorEl, "Input and expected output are required.");
+        return;
+      }
+      try {
+        await fetchJSON(`/api/admin/datasets/${datasetID}/testcases`, {
+          method: "POST",
+          body: JSON.stringify(result.payload)
+        });
+        showToast("Testcase added");
+        await loadTestcases(datasetID);
+        if (testcaseInput) testcaseInput.value = "";
+        if (testcaseOutput) testcaseOutput.value = "";
+      } catch (err) {
+        setError(errorEl, err.message || "Failed to add testcase.");
+      }
+    });
+  }
+
+  if (testcaseDatasetSelect) {
+    testcaseDatasetSelect.addEventListener("change", () => {
+      const datasetID = Number(testcaseDatasetSelect.value || 0);
+      if (datasetID) {
+        activeDatasetID = datasetID;
+      }
+      loadTestcases(datasetID);
+    });
+  }
 
   if (editorForm) {
     editorForm.addEventListener("submit", async (event) => {
@@ -1142,13 +3315,16 @@ const renderAdminProblems = async () => {
         const problemID = document.getElementById("problem-id").value;
         const method = problemID ? "PUT" : "POST";
         const url = problemID ? `/api/admin/problems/${problemID}` : "/api/admin/problems";
-        await fetchJSON(url, {
+        const response = await fetchJSON(url, {
           method,
           body: JSON.stringify(payload)
         });
         showToast("Problem saved");
-        resetEditor();
         await loadProblems();
+        const savedID = response?.problem?.id || problemID;
+        if (savedID) {
+          await loadProblemDetail(savedID);
+        }
       } catch (err) {
         setError(errorEl, err.message || "Failed to save problem.");
       }
@@ -1156,7 +3332,8 @@ const renderAdminProblems = async () => {
   }
 
   resetEditor();
-  await loadProblems();
+  resetListEditor();
+  await Promise.all([loadProblems(), loadProblemOptions(), loadProblemLists()]);
 };
 
 const renderAdminCourses = async () => {
@@ -1606,10 +3783,15 @@ const renderAdminFunnel = async () => {
     ]);
 
     const cfg = configData.config || {};
-    document.getElementById("funnel-window").value = cfg.scoring_window_days || 14;
-    document.getElementById("funnel-decay").checked = Boolean(cfg.decay_enabled);
-    document.getElementById("funnel-decay-factor").value = cfg.daily_decay_factor || 0.9;
-    document.getElementById("funnel-dormant").value = cfg.dormant_days_threshold || 21;
+    const scoringWindowDays = Number(cfg.scoring_window_days ?? cfg.ScoringWindowDays ?? 14);
+    const decayEnabled = Boolean(cfg.decay_enabled ?? cfg.DecayEnabled);
+    const dailyDecayFactor = Number(cfg.daily_decay_factor ?? cfg.DailyDecayFactor ?? 0.9);
+    const dormantDaysThreshold = Number(cfg.dormant_days_threshold ?? cfg.DormantDaysThreshold ?? 21);
+
+    document.getElementById("funnel-window").value = scoringWindowDays;
+    document.getElementById("funnel-decay").checked = decayEnabled;
+    document.getElementById("funnel-decay-factor").value = dailyDecayFactor;
+    document.getElementById("funnel-dormant").value = dormantDaysThreshold;
 
     const weights = (weightsData.weights || []).map((weight) => ({
       eventType: weight.event_type || weight.EventType || "",
@@ -2216,65 +4398,370 @@ const renderAdminUsers = async () => {
   const table = document.getElementById("users-table");
   const refreshBtn = document.getElementById("users-refresh");
   const queryInput = document.getElementById("users-query");
+  const stageFilter = document.getElementById("users-stage-filter");
+  const prevPageBtn = document.getElementById("users-prev-page");
+  const nextPageBtn = document.getElementById("users-next-page");
+  const pageMeta = document.getElementById("users-page-meta");
   const detail = document.getElementById("user-detail");
 
-  const loadUsers = async () => {
+  const listPageSize = 20;
+  const activityPageSize = 15;
+  let listPage = 0;
+  let listTotal = 0;
+  let selectedUserID = 0;
+  let selectedDetailData = null;
+  let selectedActivityData = null;
+  let eventsPage = 0;
+  let promosPage = 0;
+
+  const formatDateTime = (value) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString();
+  };
+
+  const stageLabel = (value) => {
+    const key = String(value || "").trim().toUpperCase();
+    if (!key) return "—";
+    const palette = stagePalette[key];
+    if (!palette) return key;
+    return palette.label;
+  };
+
+  const eventMetadataText = (metadata) => {
+    if (!metadata || typeof metadata !== "object") return "—";
+    const keys = Object.keys(metadata);
+    if (!keys.length) return "—";
+    const text = JSON.stringify(metadata);
+    if (text.length <= 140) return text;
+    return `${text.slice(0, 137)}...`;
+  };
+
+  const setPagingState = (button, enabled) => {
+    if (!button) return;
+    button.disabled = !enabled;
+    button.classList.toggle("opacity-40", !enabled);
+    button.classList.toggle("cursor-not-allowed", !enabled);
+  };
+
+  const updateListPagination = () => {
+    const totalPages = Math.max(1, Math.ceil(listTotal / listPageSize));
+    if (pageMeta) {
+      pageMeta.textContent = `Page ${listPage + 1} of ${totalPages} • ${listTotal} users`;
+    }
+    const hasPrev = listPage > 0;
+    const hasNext = (listPage + 1) * listPageSize < listTotal;
+    setPagingState(prevPageBtn, hasPrev);
+    setPagingState(nextPageBtn, hasNext);
+  };
+
+  const highlightSelectedUser = () => {
+    if (!table) return;
+    table.querySelectorAll("[data-user-row]").forEach((row) => {
+      const rowID = Number(row.dataset.userRow || 0);
+      row.classList.toggle("bg-slate-50", rowID === selectedUserID);
+    });
+  };
+
+  const renderUserDetail = () => {
+    if (!detail) return;
+    if (!selectedDetailData?.user) {
+      detail.innerHTML = "Select a user to view details and activity.";
+      return;
+    }
+
+    const user = selectedDetailData.user || {};
+    const metrics = selectedDetailData.metrics || {};
+    const entitlement = selectedDetailData.entitlement || {};
+    const events = selectedActivityData?.events || { items: [], total: 0, page: eventsPage, page_size: activityPageSize };
+    const promos = selectedActivityData?.promo_activities || { items: [], total: 0, page: promosPage, page_size: activityPageSize };
+    const eventItems = Array.isArray(events.items) ? events.items : [];
+    const promoItems = Array.isArray(promos.items) ? promos.items : [];
+    const eventTotal = Number(events.total || 0);
+    const promoTotal = Number(promos.total || 0);
+    const eventCurrentPage = Number(events.page || 0);
+    const promoCurrentPage = Number(promos.page || 0);
+    const eventPageSize = Number(events.page_size || activityPageSize);
+    const promoPageSize = Number(promos.page_size || activityPageSize);
+    const canPrevEvents = eventCurrentPage > 0;
+    const canNextEvents = (eventCurrentPage + 1) * eventPageSize < eventTotal;
+    const canPrevPromos = promoCurrentPage > 0;
+    const canNextPromos = (promoCurrentPage + 1) * promoPageSize < promoTotal;
+
+    detail.innerHTML = `
+      <div class="space-y-6">
+        <div>
+          <p class="text-ink text-lg font-semibold">${escapeHTML(user.name || "—")}</p>
+          <p class="text-slate-500">${escapeHTML(user.email || "—")}</p>
+          <div class="mt-4 grid gap-2 text-sm text-slate-600">
+            <div>Role: ${escapeHTML(user.role || "—")}</div>
+            <div>Status: ${escapeHTML(user.status || "—")}</div>
+            <div>Stage: ${escapeHTML(stageLabel(metrics.stage))}</div>
+            <div>Score: ${metrics.score ?? "—"}</div>
+            <div>Last active: ${escapeHTML(formatDateTime(metrics.last_active_at))}</div>
+            <div>Plan: ${escapeHTML(entitlement.plan_code || "—")}</div>
+            <div>Entitlement: ${escapeHTML(entitlement.status || "—")}</div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 p-4">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-sm font-semibold text-ink">Event activity</p>
+            <p class="text-xs text-slate-500">${eventTotal} total</p>
+          </div>
+          <div class="mt-3 space-y-2 text-xs">
+            ${
+  eventItems.length
+    ? eventItems
+      .map((item) => `
+              <div class="rounded-xl border border-slate-100 bg-white p-3">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="font-semibold text-slate-700">${escapeHTML(item.event_type || "—")}</span>
+                  <span class="text-slate-500">${escapeHTML(formatDateTime(item.created_at))}</span>
+                </div>
+                <div class="mt-1 text-slate-600">${escapeHTML(item.entity_type || "—")} ${item.entity_id ? `#${item.entity_id}` : ""}</div>
+                <div class="mt-1 text-slate-500">${escapeHTML(eventMetadataText(item.metadata))}</div>
+              </div>
+            `)
+      .join("")
+    : "<p class=\"text-slate-500\">No events recorded.</p>"
+}
+          </div>
+          <div class="mt-3 flex items-center justify-between gap-2 text-xs text-slate-500">
+            <button class="rounded-full border border-slate-200 px-3 py-1 ${canPrevEvents ? "text-slate-700" : "text-slate-400"}" data-events-page="prev" ${canPrevEvents ? "" : "disabled"}>Previous</button>
+            <span>Page ${eventCurrentPage + 1}</span>
+            <button class="rounded-full border border-slate-200 px-3 py-1 ${canNextEvents ? "text-slate-700" : "text-slate-400"}" data-events-page="next" ${canNextEvents ? "" : "disabled"}>Next</button>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 p-4">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-sm font-semibold text-ink">Promo activity</p>
+            <p class="text-xs text-slate-500">${promoTotal} total</p>
+          </div>
+          <div class="mt-3 space-y-2 text-xs">
+            ${
+  promoItems.length
+    ? promoItems
+      .map((item) => `
+              <div class="rounded-xl border border-slate-100 bg-white p-3">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="font-semibold text-slate-700">${escapeHTML(item.activity_type || "—")}</span>
+                  <span class="text-slate-500">${escapeHTML(formatDateTime(item.created_at))}</span>
+                </div>
+                <div class="mt-1 text-slate-600">
+                  Promo #${item.promo_id || "—"} · Variant #${item.variant_id || "—"}${item.slot ? ` · ${escapeHTML(item.slot)}` : ""}
+                </div>
+                <div class="mt-1 text-slate-500">${escapeHTML(item.entity_type || "—")} ${item.entity_id ? `#${item.entity_id}` : ""}</div>
+              </div>
+            `)
+      .join("")
+    : "<p class=\"text-slate-500\">No promo activity recorded.</p>"
+}
+          </div>
+          <div class="mt-3 flex items-center justify-between gap-2 text-xs text-slate-500">
+            <button class="rounded-full border border-slate-200 px-3 py-1 ${canPrevPromos ? "text-slate-700" : "text-slate-400"}" data-promos-page="prev" ${canPrevPromos ? "" : "disabled"}>Previous</button>
+            <span>Page ${promoCurrentPage + 1}</span>
+            <button class="rounded-full border border-slate-200 px-3 py-1 ${canNextPromos ? "text-slate-700" : "text-slate-400"}" data-promos-page="next" ${canNextPromos ? "" : "disabled"}>Next</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    detail.querySelectorAll("[data-events-page]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (!selectedUserID) return;
+        const direction = button.dataset.eventsPage;
+        if (direction === "prev" && eventsPage > 0) {
+          eventsPage -= 1;
+        }
+        if (direction === "next") {
+          eventsPage += 1;
+        }
+        await loadUserActivity(selectedUserID);
+      });
+    });
+
+    detail.querySelectorAll("[data-promos-page]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (!selectedUserID) return;
+        const direction = button.dataset.promosPage;
+        if (direction === "prev" && promosPage > 0) {
+          promosPage -= 1;
+        }
+        if (direction === "next") {
+          promosPage += 1;
+        }
+        await loadUserActivity(selectedUserID);
+      });
+    });
+  };
+
+  const loadUserActivity = async (userID) => {
+    if (!userID) return;
+    const params = new URLSearchParams();
+    params.set("events_page", String(eventsPage));
+    params.set("events_page_size", String(activityPageSize));
+    params.set("promos_page", String(promosPage));
+    params.set("promos_page_size", String(activityPageSize));
+
+    const data = await fetchJSON(`/api/admin/users/${userID}/activity?${params.toString()}`);
+    selectedActivityData = data || {};
+    eventsPage = Number(data?.events?.page || 0);
+    promosPage = Number(data?.promo_activities?.page || 0);
+    renderUserDetail();
+  };
+
+  const loadUserDetail = async (id, options = {}) => {
+    const userID = Number(id || 0);
+    if (!userID || !detail) return;
+    const resetActivityPages = options.resetActivityPages !== false;
+
+    selectedUserID = userID;
+    if (resetActivityPages) {
+      eventsPage = 0;
+      promosPage = 0;
+      selectedActivityData = null;
+    }
+    highlightSelectedUser();
+
     try {
       clearError(errorEl);
-      const params = new URLSearchParams();
-      if (queryInput?.value) params.set("q", queryInput.value.trim());
-      const data = await fetchJSON(`/api/admin/users?${params.toString()}`);
-      const items = data.items || [];
-      if (table) {
-        table.innerHTML = items
-          .map(
-            (user) => `
-          <tr>
-            <td class="py-4 text-slate-800">${user.name || "—"}</td>
-            <td class="py-4 text-slate-600">${user.email}</td>
-            <td class="py-4 text-slate-600">${user.role}</td>
+      selectedDetailData = await fetchJSON(`/api/admin/users/${userID}`);
+      renderUserDetail();
+      await loadUserActivity(userID);
+    } catch (err) {
+      setError(errorEl, err.message || "Failed to load user.");
+    }
+  };
+
+  const renderUsersTable = (items) => {
+    if (!table) return;
+    if (!items.length) {
+      table.innerHTML = `
+        <tr>
+          <td colspan="5" class="py-6 text-center text-slate-500">No users found.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    table.innerHTML = items
+      .map((user) => {
+        const isSelected = Number(user.id) === selectedUserID;
+        return `
+          <tr data-user-row="${user.id}" class="${isSelected ? "bg-slate-50" : ""}">
+            <td class="py-4 text-slate-800">${escapeHTML(user.name || "—")}</td>
+            <td class="py-4 text-slate-600">${escapeHTML(user.email || "—")}</td>
+            <td class="py-4 text-slate-600">${escapeHTML(stageLabel(user.stage))}</td>
+            <td class="py-4 text-slate-600">${escapeHTML(user.role || "—")}</td>
             <td class="py-4 text-right"><button class="text-primary" data-user-id="${user.id}">View</button></td>
           </tr>
-        `
-          )
-          .join("");
-        table.querySelectorAll("[data-user-id]").forEach((btn) => {
-          btn.addEventListener("click", () => loadUserDetail(btn.dataset.userId));
-        });
+        `;
+      })
+      .join("");
+
+    table.querySelectorAll("[data-user-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const rowUserID = Number(button.dataset.userId || 0);
+        const resetActivityPages = rowUserID !== selectedUserID;
+        loadUserDetail(rowUserID, { resetActivityPages });
+      });
+    });
+  };
+
+  const loadUsers = async (options = {}) => {
+    try {
+      clearError(errorEl);
+      if (options.resetPage) {
+        listPage = 0;
+      }
+
+      const params = new URLSearchParams();
+      if (queryInput?.value) params.set("q", queryInput.value.trim());
+      if (stageFilter?.value) params.set("stage", stageFilter.value);
+      params.set("page", String(listPage));
+      params.set("page_size", String(listPageSize));
+
+      const data = await fetchJSON(`/api/admin/users?${params.toString()}`);
+      const items = data.items || [];
+      listTotal = Number(data.total || 0);
+      renderUsersTable(items);
+      updateListPagination();
+      if (selectedUserID && !items.some((item) => Number(item.id) === selectedUserID)) {
+        selectedUserID = 0;
+        selectedDetailData = null;
+        selectedActivityData = null;
+        renderUserDetail();
       }
     } catch (err) {
       setError(errorEl, err.message || "Failed to load users.");
     }
   };
 
-  const loadUserDetail = async (id) => {
-    if (!id || !detail) return;
+  const loadStageFilters = async () => {
+    if (!stageFilter) return;
+    const options = [{ value: "", label: "All stages" }];
+    const seen = new Set([""]);
+
     try {
-      clearError(errorEl);
-      const data = await fetchJSON(`/api/admin/users/${id}`);
-      const user = data.user || {};
-      const metrics = data.metrics || {};
-      const entitlement = data.entitlement || {};
-      detail.innerHTML = `
-        <p class="text-ink text-lg">${user.name || "—"}</p>
-        <p class="text-slate-500">${user.email || "—"}</p>
-        <div class="mt-4 text-sm text-slate-600 space-y-1">
-          <div>Role: ${user.role || "—"}</div>
-          <div>Status: ${user.status || "—"}</div>
-          <div>Stage: ${metrics.stage || "—"}</div>
-          <div>Score: ${metrics.score ?? "—"}</div>
-          <div>Plan: ${entitlement.plan_code || "—"}</div>
-          <div>Entitlement: ${entitlement.status || "—"}</div>
-        </div>
-      `;
+      const data = await fetchJSON("/api/admin/funnel/stages");
+      const stages = Array.isArray(data.stages) ? data.stages : [];
+      stages.forEach((row) => {
+        const stageRaw = row?.stage || row?.Stage || "";
+        const stage = String(stageRaw).trim().toUpperCase();
+        const enabled = row?.enabled;
+        const enabledLegacy = row?.Enabled;
+        const isEnabled = enabledLegacy === undefined ? enabled !== false : enabledLegacy !== false;
+        if (!stage || seen.has(stage)) return;
+        if (!isEnabled) return;
+        seen.add(stage);
+        options.push({ value: stage, label: stageLabel(stage) });
+      });
     } catch (err) {
-      setError(errorEl, err.message || "Failed to load user.");
+      stageOrder.forEach((stage) => {
+        if (seen.has(stage)) return;
+        seen.add(stage);
+        options.push({ value: stage, label: stageLabel(stage) });
+      });
     }
+
+    stageFilter.innerHTML = options
+      .map((option) => `<option value="${escapeHTML(option.value)}">${escapeHTML(option.label)}</option>`)
+      .join("");
   };
 
-  if (refreshBtn) refreshBtn.addEventListener("click", loadUsers);
-  if (queryInput) queryInput.addEventListener("change", loadUsers);
+  if (refreshBtn) refreshBtn.addEventListener("click", () => loadUsers());
+  if (queryInput) {
+    queryInput.addEventListener("change", () => loadUsers({ resetPage: true }));
+    queryInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      loadUsers({ resetPage: true });
+    });
+  }
+  if (stageFilter) {
+    stageFilter.addEventListener("change", () => loadUsers({ resetPage: true }));
+  }
+  if (prevPageBtn) {
+    prevPageBtn.addEventListener("click", async () => {
+      if (listPage <= 0) return;
+      listPage -= 1;
+      await loadUsers();
+    });
+  }
+  if (nextPageBtn) {
+    nextPageBtn.addEventListener("click", async () => {
+      const hasNext = (listPage + 1) * listPageSize < listTotal;
+      if (!hasNext) return;
+      listPage += 1;
+      await loadUsers();
+    });
+  }
 
+  await loadStageFilters();
+  renderUserDetail();
   await loadUsers();
 };
 
@@ -2379,6 +4866,30 @@ const toolCatalog = {
   }
 };
 
+const renderOneSubDesktopToolCard = () => {
+  return `
+    <a href="/tools/onesub-desktop" class="rounded-3xl border border-slate-200/60 bg-white/90 p-6 hover:border-skyline/60 transition">
+      <div class="flex items-center justify-between gap-3">
+        <div class="text-xs uppercase tracking-wide text-slate-500">desktop app</div>
+        <div class="flex items-center gap-2">
+          <span class="inline-grid h-8 w-8 place-items-center rounded-xl bg-slate-900 text-white text-lg leading-none"></span>
+          <span class="inline-grid h-8 w-8 place-items-center rounded-xl bg-[#0078d4]">
+            <span class="grid h-4 w-4 grid-cols-2 gap-[2px]">
+              <span class="bg-white rounded-[1px]"></span>
+              <span class="bg-white rounded-[1px]"></span>
+              <span class="bg-white rounded-[1px]"></span>
+              <span class="bg-white rounded-[1px]"></span>
+            </span>
+          </span>
+        </div>
+      </div>
+      <h3 class="mt-4 font-display text-xl text-ink">OneSub Desktop</h3>
+      <p class="mt-2 text-slate-600 text-sm">Download the OneSub desktop editor for macOS and Windows. Sign in required.</p>
+      <div class="mt-4 text-skyline text-sm">Open tool -></div>
+    </a>
+  `;
+};
+
 const renderToolCard = (tool) => {
   const meta = toolCatalog[tool.slug] || {};
   const title = meta.title || tool.name || "Tool";
@@ -2423,7 +4934,8 @@ const renderCourseCard = (course) => {
   const highlights = Array.isArray(metadata.highlights) ? metadata.highlights.slice(0, 1) : [];
 
   return `
-    <a href="/course/${course.slug}" class="rounded-3xl border border-slate-200/60 bg-white/90 p-5 hover:border-ember/60 transition flex flex-col">
+    <a href="/course/${course.slug}" class="rounded-3xl border border-slate-200/60 bg-white/90 p-5 hover:border-ember/60 transition flex flex-col"
+      data-course-open-id="${Number(course.id || 0)}" data-course-open-slug="${escapeHTML(course.slug || "")}">
       ${thumbnail ? `<img src="${thumbnail}" alt="${course.title || "Course"} thumbnail" class="h-40 w-full object-cover rounded-2xl border border-slate-100" />` : ""}
       <div class="mt-4 text-xs uppercase tracking-wide text-slate-500">${difficulty}</div>
       <h3 class="mt-2 font-display text-xl text-ink">${course.title}</h3>
@@ -2441,19 +4953,280 @@ const renderCourseCard = (course) => {
   `;
 };
 
+const bindCourseOpenTracking = (container) => {
+  if (!container) return;
+  container.querySelectorAll("[data-course-open-id], [data-course-open-slug]").forEach((link) => {
+    if (link.dataset.courseOpenTracked === "true") return;
+    link.dataset.courseOpenTracked = "true";
+    link.addEventListener("click", () => {
+      const courseID = Number(link.dataset.courseOpenId || 0);
+      const courseSlug = String(link.dataset.courseOpenSlug || "").trim();
+      const event = {
+        type: "course_open_click",
+        entity_type: "COURSE",
+        meta: {}
+      };
+      if (courseID > 0) {
+        event.entity_id = courseID;
+      }
+      if (courseSlug) {
+        event.meta.course_slug = courseSlug;
+      }
+      sendEvents([event]);
+    });
+  });
+};
+
+const difficultyBadgeMeta = (difficulty) => {
+  const normalized = String(difficulty || "").toUpperCase();
+  if (normalized === "MEDIUM") {
+    return { label: "MEDIUM", className: "bg-amber-50 text-amber-600" };
+  }
+  if (normalized === "HARD") {
+    return { label: "HARD", className: "bg-rose-50 text-rose-600" };
+  }
+  return { label: "EASY", className: "bg-emerald-50 text-emerald-600" };
+};
+
+const renderPracticeSectionIcon = (list, index) => {
+  const isDefault = Boolean(list.is_default) || index === 0;
+  const wrapperClass = isDefault ? "bg-blue-100 text-blue-600" : "bg-indigo-100 text-indigo-600";
+  const icon = isDefault
+    ? "<path d=\"M4 7h16M4 12h16M4 17h16\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\"/>"
+    : "<path d=\"M6 18h12M7 18V7l5-3 5 3v11\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M10 11h4\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\"/>";
+  return `
+    <span class="inline-flex size-8 items-center justify-center rounded-md ${wrapperClass}">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">${icon}</svg>
+    </span>
+  `;
+};
+
+const renderPracticeListCard = (list, index) => {
+  const problems = Array.isArray(list.problems) ? list.problems : [];
+  return `
+    <section class="space-y-4" data-practice-list-section>
+      <div class="flex items-center gap-3">
+        ${renderPracticeSectionIcon(list, index)}
+        <h2 class="font-display text-[20px] leading-7 text-ink">${escapeHTML(list.name || "Problem List")}</h2>
+      </div>
+      <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="divide-y divide-slate-100" data-practice-list-problems>
+          ${problems.map(renderPracticeListProblemRow).join("")}
+        </div>
+      </div>
+      <p class="hidden rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500" data-practice-list-empty>No problems match this search.</p>
+    </section>
+  `;
+};
+
+const renderPracticeRowStatusIcon = (solved) => {
+  if (solved) {
+    return `
+      <span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 12.5L10 16L18 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </span>
+    `;
+  }
+  return `
+    <span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-slate-300 text-white">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M6 12H18" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+      </svg>
+    </span>
+  `;
+};
+
+const renderPracticeListProblemRow = (problem) => {
+  const tags = Array.isArray(problem.tags) ? problem.tags : [];
+  const isSolved = Boolean(problem.solved);
+  const difficulty = difficultyBadgeMeta(problem.difficulty);
+  const searchText = `${problem.title || ""} ${problem.slug || ""} ${problem.difficulty || ""} ${tags.join(" ")}`.toLowerCase();
+  const action = isSolved
+    ? "<span class=\"text-sm font-semibold text-blue-600\">Review</span>"
+    : "<span class=\"rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700\">Solve Now</span>";
+
+  return `
+    <a
+      href="/practice/${problem.slug}"
+      data-practice-problem-row
+      data-practice-problem-search="${escapeHTML(searchText)}"
+      class="group flex items-center justify-between gap-4 px-5 py-5 transition hover:bg-slate-50 ${isSolved ? "bg-slate-50/80" : "bg-white"}"
+    >
+      <div class="min-w-0 flex items-start gap-4">
+        ${renderPracticeRowStatusIcon(isSolved)}
+        <div class="min-w-0">
+          <p class="truncate text-base leading-6 font-semibold text-ink">${escapeHTML(problem.title || "Problem")}</p>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            ${isSolved ? "<span class=\"rounded px-2 py-0.5 text-[10px] font-bold tracking-[0.5px] uppercase bg-emerald-100 text-emerald-700\">Solved</span>" : ""}
+            <span class="rounded px-2 py-0.5 text-[10px] font-bold tracking-[0.5px] uppercase ${difficulty.className}">${difficulty.label}</span>
+            ${tags
+              .slice(0, 5)
+              .map((tag) => `<span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">${escapeHTML(tag)}</span>`)
+              .join("")}
+          </div>
+        </div>
+      </div>
+      <div class="shrink-0">${action}</div>
+    </a>
+  `;
+};
+
+const bindPracticeListSearch = (input) => {
+  const root = input?.root;
+  if (!root) return;
+
+  const sections = Array.from(root.querySelectorAll("[data-practice-list-section]"));
+  const searchInput = input.globalSearchInput;
+  const pageEmptyState = input.emptyState;
+
+  const applyFilter = () => {
+    const term = String(searchInput?.value || "").trim().toLowerCase();
+    let visibleSections = 0;
+
+    sections.forEach((section) => {
+      const rows = Array.from(section.querySelectorAll("[data-practice-problem-row]"));
+      const listEmpty = section.querySelector("[data-practice-list-empty]");
+      let visibleRows = 0;
+
+      rows.forEach((row) => {
+        const haystack = String(row.dataset.practiceProblemSearch || "");
+        const visible = !term || haystack.includes(term);
+        row.classList.toggle("hidden", !visible);
+        if (visible) visibleRows += 1;
+      });
+
+      const sectionVisible = visibleRows > 0;
+      section.classList.toggle("hidden", !sectionVisible);
+      if (listEmpty) {
+        listEmpty.classList.toggle("hidden", sectionVisible || !term);
+      }
+
+      if (sectionVisible) visibleSections += 1;
+    });
+
+    if (pageEmptyState) {
+      if (term && visibleSections === 0) {
+        pageEmptyState.textContent = "No problems match this search.";
+        setVisibility(pageEmptyState, true);
+      } else {
+        setVisibility(pageEmptyState, false);
+      }
+    }
+  };
+
+  if (searchInput) {
+    searchInput.addEventListener("input", applyFilter);
+  }
+  applyFilter();
+};
+
+const renderPracticeStats = (stats, target) => {
+  if (!target) return;
+
+  const solvedByDifficulty = stats.solved_by_difficulty || {};
+  const totalByDifficulty = stats.total_by_difficulty || {};
+  const solvedByTag = Array.isArray(stats.solved_by_tag) ? stats.solved_by_tag : [];
+
+  const totalSolved = Number(stats.total_solved || 0);
+  const totalProblems = Number(stats.total_problems || 0);
+
+  const percent = (value, total) => {
+    const numerator = Number(value || 0);
+    const denominator = Number(total || 0);
+    if (denominator <= 0) return 0;
+    return Math.max(0, Math.min(100, (numerator / denominator) * 100));
+  };
+
+  const overallPercent = percent(totalSolved, totalProblems);
+  const easySolved = Number(solvedByDifficulty.EASY || 0);
+  const mediumSolved = Number(solvedByDifficulty.MEDIUM || 0);
+  const hardSolved = Number(solvedByDifficulty.HARD || 0);
+  const easyTotal = Number(totalByDifficulty.EASY || 0);
+  const mediumTotal = Number(totalByDifficulty.MEDIUM || 0);
+  const hardTotal = Number(totalByDifficulty.HARD || 0);
+
+  const renderDifficultyProgress = (label, solved, total, labelClass, barClass) => {
+    return `
+      <div class="space-y-1">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-semibold uppercase ${labelClass}">${label}</span>
+          <span class="font-semibold text-slate-700">${solved} / ${total}</span>
+        </div>
+        <div class="h-1.5 w-full rounded-full bg-slate-100">
+          <div class="h-1.5 rounded-full ${barClass}" style="width: ${percent(solved, total)}%;"></div>
+        </div>
+      </div>
+    `;
+  };
+
+  const tagColors = ["bg-blue-400", "bg-indigo-400", "bg-violet-400", "bg-sky-400", "bg-cyan-400", "bg-emerald-400"];
+  const tagRows = solvedByTag.length
+    ? solvedByTag.slice(0, 6).map((item, index) => {
+      const tag = escapeHTML(item.tag || "");
+      const solved = Number(item.solved || 0);
+      const color = tagColors[index % tagColors.length];
+      return `
+        <div class="flex items-center justify-between text-sm">
+          <span class="flex items-center gap-2 text-slate-600">
+            <span class="inline-block size-2 rounded-full ${color}"></span>
+            ${tag}
+          </span>
+          <span class="font-bold text-ink">${solved}</span>
+        </div>
+      `;
+    }).join("")
+    : "<p class=\"text-sm text-slate-500\">Solve problems to unlock tag stats.</p>";
+
+  target.innerHTML = `
+    <div class="flex items-center gap-3">
+      <span class="inline-flex size-8 items-center justify-center rounded-md bg-blue-100 text-blue-600">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 13H8V20H4V13ZM10 8H14V20H10V8ZM16 4H20V20H16V4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
+        </svg>
+      </span>
+      <h3 class="font-display text-[20px] leading-7 text-ink">Your Stats</h3>
+    </div>
+
+    <div class="mt-5">
+      <div class="flex items-end justify-between">
+        <p class="text-xs font-medium uppercase tracking-[0.4px] text-slate-500">Overall Progress</p>
+        <p class="text-2xl font-bold text-ink">${totalSolved}<span class="ml-1 text-sm font-normal text-slate-400">/ ${totalProblems}</span></p>
+      </div>
+      <div class="mt-2 h-1.5 w-full rounded-full bg-slate-100">
+        <div class="h-1.5 rounded-full bg-blue-600" style="width: ${overallPercent}%;"></div>
+      </div>
+    </div>
+
+    <div class="mt-6 space-y-3">
+      ${renderDifficultyProgress("Easy", easySolved, easyTotal, "text-emerald-600", "bg-emerald-500")}
+      ${renderDifficultyProgress("Medium", mediumSolved, mediumTotal, "text-amber-600", "bg-amber-500")}
+      ${renderDifficultyProgress("Hard", hardSolved, hardTotal, "text-rose-600", "bg-rose-500")}
+    </div>
+
+    <div class="mt-7 border-t border-slate-100 pt-5">
+      <p class="text-base font-bold text-ink">Solved By Tag</p>
+      <div class="mt-3 space-y-2">${tagRows}</div>
+    </div>
+  `;
+
+  target.classList.remove("hidden");
+};
+
 const renderProblemCard = (problem) => {
   const tags = Array.isArray(problem.tags) ? problem.tags : [];
   const difficulty = problem.difficulty || "EASY";
   return `
-    <div class="rounded-3xl border border-slate-200/60 bg-white/90 p-6 flex flex-col">
+    <a href="/practice/${problem.slug}" class="rounded-3xl border border-slate-200/60 bg-white/90 p-6 flex flex-col hover:border-primary/60 transition">
       <div class="text-xs uppercase tracking-wide text-slate-500">${difficulty}</div>
       <h3 class="mt-3 font-display text-xl text-ink">${problem.title || "Problem"}</h3>
       <p class="mt-2 text-slate-600 text-sm">${problem.slug || ""}</p>
       <div class="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
         ${tags.slice(0, 4).map((tag) => `<span class="rounded-full border border-slate-200 px-2 py-1">${tag}</span>`).join("")}
       </div>
-      <div class="mt-5 rounded-full bg-slate-100 text-slate-600 text-center py-2 font-semibold">Practice coming soon</div>
-    </div>
+      <div class="mt-5 rounded-full bg-primary text-white text-center py-2 font-semibold">Solve challenge</div>
+    </a>
   `;
 };
 
@@ -2512,6 +5285,8 @@ const renderPlanCard = (plan) => {
     "All paid posts unlocked",
     "All courses included",
     "All tools included",
+    "OneSub Desktop included",
+    "Run and practice DSA challenges",
     "Curated, structured learning methods",
   ];
 
@@ -2685,6 +5460,48 @@ const escapeHTML = (value) => {
     .replace(/'/g, "&#39;");
 };
 
+const unescapeHTML = (value) => {
+  return String(value || "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+};
+
+const normalizeLatexFallback = (value) => {
+  let text = String(value || "");
+  const latexReplacements = [
+    [/\s*\\to\s*/g, " -> "],
+    [/\s*\\rightarrow\s*/g, " -> "],
+    [/\s*\\leftarrow\s*/g, " <- "],
+    [/\s*\\dots\s*/g, " ... "],
+    [/\s*\\cdots\s*/g, " ... "],
+    [/\s*\\cdot\s*/g, " * "],
+    [/\s*\\times\s*/g, " x "],
+    [/\s*\\leq?\s*/g, " <= "],
+    [/\s*\\geq?\s*/g, " >= "],
+    [/\s*\\neq\s*/g, " != "],
+    [/\s*\\infty\s*/g, " inf "]
+  ];
+
+  latexReplacements.forEach(([pattern, replacement]) => {
+    text = text.replace(pattern, replacement);
+  });
+
+  text = text.replace(/[{}]/g, "");
+  text = text.replace(/\s+/g, " ").trim();
+  return text;
+};
+
+const renderInlineMath = (expression) => {
+  const latexExpression = unescapeHTML(expression).trim();
+  if (!latexExpression) return "";
+
+  const fallbackMath = normalizeLatexFallback(latexExpression);
+  return `<span class="rounded bg-slate-100 px-1 py-0.5 font-mono text-[0.95em] text-slate-700">${escapeHTML(fallbackMath)}</span>`;
+};
+
 const refreshLucide = () => {
   if (window.lucide && typeof window.lucide.createIcons === "function") {
     window.lucide.createIcons();
@@ -2693,12 +5510,70 @@ const refreshLucide = () => {
 
 const formatInlineMarkdown = (value) => {
   let text = value;
+  const mathTokens = [];
+  const mathTokenForIndex = (index) => `@@MATHTOKEN${index}@@`;
+
+  text = text.replace(/\$\$([^$]+)\$\$/g, (_, expression) => {
+    const tokenIndex = mathTokens.push(renderInlineMath(expression)) - 1;
+    return mathTokenForIndex(tokenIndex);
+  });
+
+  text = text.replace(/\$([^$\n]+)\$/g, (_, expression) => {
+    const tokenIndex = mathTokens.push(renderInlineMath(expression)) - 1;
+    return mathTokenForIndex(tokenIndex);
+  });
+
   text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   text = text.replace(/__(.+?)__/g, "<strong>$1</strong>");
   text = text.replace(/\*(.+?)\*/g, "<em>$1</em>");
   text = text.replace(/_(.+?)_/g, "<em>$1</em>");
   text = text.replace(/`([^`]+)`/g, "<code class=\"rounded bg-slate-100 px-1\">$1</code>");
+
+  mathTokens.forEach((mathHTML, index) => {
+    text = text.split(mathTokenForIndex(index)).join(mathHTML);
+  });
+
   return text;
+};
+
+const normalizeMarkdownCodeLanguage = (language) => {
+  const normalizedLanguage = String(language || "").trim().toLowerCase();
+  if (!normalizedLanguage) return "";
+
+  const aliases = {
+    cxx: "cpp",
+    "c++": "cpp",
+    cc: "cpp",
+    golang: "go",
+    js: "javascript",
+    jsx: "javascript",
+    py: "python",
+    rs: "rust",
+    shell: "bash",
+    sh: "bash",
+    ts: "typescript",
+    tsx: "typescript",
+    txt: "plaintext",
+    text: "plaintext"
+  };
+
+  return aliases[normalizedLanguage] || normalizedLanguage;
+};
+
+const markdownHeadingTag = (level) => {
+  if (level <= 1) return "h2";
+  if (level === 2) return "h3";
+  if (level === 3) return "h4";
+  if (level === 4) return "h5";
+  return "h6";
+};
+
+const markdownHeadingClass = (level) => {
+  if (level <= 1) return "mt-4 text-2xl font-semibold text-ink";
+  if (level === 2) return "mt-4 text-xl font-semibold text-ink";
+  if (level === 3) return "mt-3 text-lg font-semibold text-ink";
+  if (level === 4) return "mt-3 text-base font-semibold text-ink";
+  return "mt-2 text-sm font-semibold text-ink";
 };
 
 const renderMarkdownToHTML = (markdown) => {
@@ -2710,10 +5585,19 @@ const renderMarkdownToHTML = (markdown) => {
 
   lines.forEach((line) => {
     const trimmed = line.trim();
-    if (trimmed.startsWith("```")) {
+    const fenceMatch = trimmed.match(/^```([^\s`]*)?\s*$/);
+    if (fenceMatch) {
+      if (inList) {
+        html += "</ul>";
+        inList = false;
+      }
+
       if (!inCode) {
+        const codeLanguage = normalizeMarkdownCodeLanguage(fenceMatch[1] || "");
+        const languageClass = codeLanguage ? ` language-${codeLanguage}` : "";
+        const languageAttribute = codeLanguage ? ` data-code-language="${codeLanguage}"` : "";
         inCode = true;
-        html += "<pre class=\"mt-3 rounded-2xl bg-slate-900 text-slate-100 p-4 overflow-x-auto\"><code>";
+        html += `<pre class="mt-3 overflow-x-auto rounded-2xl bg-slate-900 p-4 text-slate-100"><code class="hljs${languageClass}"${languageAttribute}>`;
       } else {
         inCode = false;
         html += "</code></pre>";
@@ -2746,16 +5630,13 @@ const renderMarkdownToHTML = (markdown) => {
       return;
     }
 
-    if (trimmed.startsWith("### ")) {
-      html += `<h4 class="mt-3 font-semibold text-ink">${formatInlineMarkdown(trimmed.replace(/^###\s+/, ""))}</h4>`;
-      return;
-    }
-    if (trimmed.startsWith("## ")) {
-      html += `<h3 class="mt-3 font-semibold text-ink">${formatInlineMarkdown(trimmed.replace(/^##\s+/, ""))}</h3>`;
-      return;
-    }
-    if (trimmed.startsWith("# ")) {
-      html += `<h2 class="mt-3 font-semibold text-ink">${formatInlineMarkdown(trimmed.replace(/^#\s+/, ""))}</h2>`;
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const headingLevel = headingMatch[1].length;
+      const headingTag = markdownHeadingTag(headingLevel);
+      const headingClass = markdownHeadingClass(headingLevel);
+      const headingContent = formatInlineMarkdown(headingMatch[2]);
+      html += `<${headingTag} class="${headingClass}">${headingContent}</${headingTag}>`;
       return;
     }
 
@@ -2769,6 +5650,32 @@ const renderMarkdownToHTML = (markdown) => {
     html += "</code></pre>";
   }
   return html;
+};
+
+const highlightCodeBlocks = (container) => {
+  if (!container) return;
+  if (!window.hljs || typeof window.hljs.highlightElement !== "function") {
+    return;
+  }
+
+  container.querySelectorAll("pre code").forEach((codeBlock) => {
+    if (codeBlock.dataset.highlighted === "yes" || codeBlock.dataset.hljsApplied === "true") {
+      return;
+    }
+    try {
+      window.hljs.highlightElement(codeBlock);
+    } catch (err) {
+      // Ignore highlight failures and keep plain code visible.
+    }
+    codeBlock.dataset.hljsApplied = "true";
+  });
+};
+
+const setMarkdownContent = (container, markdown, fallbackHTML) => {
+  if (!container) return;
+  const markdownText = String(markdown || "").trim();
+  container.innerHTML = markdownText ? renderMarkdownToHTML(markdownText) : fallbackHTML;
+  highlightCodeBlocks(container);
 };
 
 const fetchMentorResponse = async (session) => {
@@ -4407,20 +7314,50 @@ function describeEventWeight(eventType) {
   if (key === "post_open") {
     return "One time when a post is opened.";
   }
-  if (key === "scroll_depth") {
+  if (key === "post_scroll_depth") {
     return "Fires at 25/50/75/90% scroll milestones.";
   }
-  if (key === "time_on_page") {
+  if (key === "post_time_on_page") {
     return "Fires at 15/45/90 seconds.";
   }
   if (key === "post_complete") {
     return "Triggered after scroll + time completion.";
   }
-  if (key === "promo_click") {
+  if (key === "post_promo_click") {
     return "CTA clicks on promos.";
   }
-  if (key === "paywall_hit") {
+  if (key === "post_paywall_hit") {
     return "Locked content attempts.";
+  }
+  if (key === "course_open_click") {
+    return "Course card clicks from the course library.";
+  }
+  if (key === "course_open") {
+    return "Fires when a course page is opened.";
+  }
+  if (key === "course_lesson_click") {
+    return "Fires when a lesson is selected in a course.";
+  }
+  if (key === "course_time_on_page") {
+    return "Fires at time milestones while viewing a course page.";
+  }
+  if (key === "course_lesson_time_on_page") {
+    return "Fires at time milestones while reading a lesson.";
+  }
+  if (key === "practice_problem_open") {
+    return "Fires when a practice problem page is opened.";
+  }
+  if (key === "practice_time_on_page") {
+    return "Fires at time milestones while on a practice problem page.";
+  }
+  if (key === "practice_run_click") {
+    return "Run button clicks on the practice editor.";
+  }
+  if (key === "practice_submit_click") {
+    return "Submit button clicks on the practice editor.";
+  }
+  if (key === "practice_ai_analyze_click") {
+    return "Analyze with AI button clicks.";
   }
   return "Event contribution to funnel score.";
 }
@@ -5150,33 +8087,89 @@ const showToast = (message) => {
   setTimeout(() => toast.remove(), 2600);
 };
 
-const initPromoSlots = (pageType, postId) => {
-  if (!postId) return;
+const normalizePromoContext = (input = {}) => {
+  const entityType = String(input.entityType || "").trim().toUpperCase();
+  const entityID = Number(input.entityID || 0);
+  const postID = entityType === "POST" ? entityID : Number(input.postID || 0);
+  return { entityType, entityID, postID };
+};
+
+const handlePromoCTAAction = (promo) => {
+  if (!promo) return;
+  if (promo.cta_action === "OPEN_PRICING") {
+    window.location.href = "/pricing";
+    return;
+  }
+  if (promo.cta_action === "START_CHECKOUT") {
+    const plan = promo.cta_payload?.plan_default || "monthly";
+    openCheckout(plan);
+  }
+};
+
+const initPromoSlots = (promoContextInput = {}) => {
+  const promoContext = normalizePromoContext(promoContextInput);
+  if (promoContext.entityType !== "POST" || promoContext.entityID <= 0) return;
   const slots = ["INLINE", "BOTTOM_CARD"];
 
   slots.forEach((slot) => {
-    decidePromo(slot, postId).then((promo) => {
+    decidePromo(slot, promoContext).then((promo) => {
       if (!promo) return;
-      renderPromo(slot, promo, postId);
+      renderPromo(slot, promo, promoContext);
     });
   });
 };
 
-const decidePromo = async (slot, postId) => {
-  const url = `${API.promos}/decide?slot=${slot}&post_id=${postId}&anon_id=${state.anonId}`;
-  const res = await fetchJSON(url);
+const loadPromoIntoSlot = async (input = {}) => {
+  const container = input.container;
+  if (!container) return;
+
+  container.innerHTML = "";
+  container.classList.add("hidden");
+
+  try {
+    const promo = await decidePromo(input.slot, input.promoContext);
+    if (!promo) {
+      return;
+    }
+    renderContextPromoCard(container, promo, input.promoContext, input.slotLabel);
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+const decidePromo = async (slot, promoContextInput = {}) => {
+  const normalizedSlot = String(slot || "").trim();
+  const promoContext = normalizePromoContext(promoContextInput);
+  if (!normalizedSlot || !promoContext.entityType || promoContext.entityID <= 0) {
+    return null;
+  }
+
+  const params = new URLSearchParams();
+  params.set("slot", normalizedSlot);
+  params.set("entity_type", promoContext.entityType);
+  params.set("entity_id", String(promoContext.entityID));
+  if (promoContext.postID > 0) {
+    params.set("post_id", String(promoContext.postID));
+  }
+  params.set("anon_id", state.anonId);
+
+  const res = await fetchJSON(`${API.promos}/decide?${params.toString()}`);
   if (res.promo) {
     res.promo.decision_id = res.decision_id;
   }
-  return res.promo;
+  return res.promo || null;
 };
 
-const renderPromo = (slot, promo, postId) => {
+const renderPromo = (slot, promo, promoContextInput = {}) => {
   const body = selectors.postBody();
   if (!body) return;
+  const promoContext = normalizePromoContext(promoContextInput);
+
+  body.querySelectorAll(`[data-post-promo-slot="${slot}"]`).forEach((card) => card.remove());
 
   const card = document.createElement("div");
   card.className = "rounded-2xl border border-slate-200 bg-white/90 p-6 my-8";
+  card.dataset.postPromoSlot = slot;
   card.innerHTML = `
     <p class="text-xs uppercase tracking-wide text-slate-500">${slot.replace("_", " ")}</p>
     <h3 class="mt-2 font-display text-xl text-ink">${promo.headline}</h3>
@@ -5186,15 +8179,8 @@ const renderPromo = (slot, promo, postId) => {
 
   const button = card.querySelector("button");
   button.addEventListener("click", () => {
-    logPromo("click", promo, postId);
-    if (promo.cta_action === "OPEN_PRICING") {
-      window.location.href = "/pricing";
-      return;
-    }
-    if (promo.cta_action === "START_CHECKOUT") {
-      const plan = promo.cta_payload?.plan_default || "monthly";
-      openCheckout(plan);
-    }
+    logPromo("click", promo, promoContext);
+    handlePromoCTAAction(promo);
   });
 
   if (slot === "INLINE") {
@@ -5213,25 +8199,115 @@ const renderPromo = (slot, promo, postId) => {
     body.appendChild(card);
   }
 
-  logPromo("impression", promo, postId);
+  logPromo("impression", promo, promoContext);
 };
 
-const logPromo = async (type, promo, postId) => {
+const renderContextPromoCard = (container, promo, promoContextInput = {}, slotLabel = "Recommendation") => {
+  if (!container) return;
+  const promoContext = normalizePromoContext(promoContextInput);
+  container.classList.remove("hidden");
+  container.innerHTML = `
+    <div class="rounded-2xl border border-slate-200 bg-white/90 p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">${escapeHTML(slotLabel)}</p>
+      <h3 class="mt-2 font-display text-lg text-ink">${escapeHTML(promo.headline || "")}</h3>
+      <p class="mt-2 text-sm text-slate-600">${escapeHTML(promo.body || "")}</p>
+      <button class="mt-4 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white" data-context-promo-action>
+        ${escapeHTML(promo.cta_text || "Learn more")}
+      </button>
+    </div>
+  `;
+
+  const button = container.querySelector("[data-context-promo-action]");
+  if (button) {
+    button.addEventListener("click", () => {
+      logPromo("click", promo, promoContext);
+      handlePromoCTAAction(promo);
+    });
+  }
+
+  logPromo("impression", promo, promoContext);
+};
+
+const logPromo = async (type, promo, promoContextInput = {}) => {
+  const promoContext = normalizePromoContext(promoContextInput);
   const payload = {
     decision_id: promo.decision_id,
     promo_id: promo.promo_id,
     variant_id: promo.variant_id,
-    post_id: postId,
     anon_id: state.anonId
   };
+  if (promoContext.entityType) {
+    payload.entity_type = promoContext.entityType;
+  }
+  if (promoContext.entityID > 0) {
+    payload.entity_id = promoContext.entityID;
+  }
+  if (promoContext.postID > 0) {
+    payload.post_id = promoContext.postID;
+  }
   await fetchJSON(`${API.promos}/${type}`, {
     method: "POST",
     body: JSON.stringify(payload)
   });
+
+  if (type === "click" && promoContext.entityType === "POST" && promoContext.entityID > 0) {
+    sendEvents([{
+      type: "post_promo_click",
+      entity_type: "POST",
+      entity_id: promoContext.entityID,
+      meta: {
+        promo_id: promo.promo_id || 0,
+        variant_id: promo.variant_id || 0
+      }
+    }]);
+  }
+};
+
+const startTimedEventTracking = (input = {}) => {
+  const eventType = String(input.eventType || "").trim();
+  if (!eventType) {
+    return () => {};
+  }
+
+  const entityType = String(input.entityType || "").trim();
+  const entityID = Number(input.entityID || 0);
+  const baseMeta = input.meta && typeof input.meta === "object" ? input.meta : {};
+  const milestones = Array.isArray(input.milestones) && input.milestones.length
+    ? input.milestones
+    : [15, 45, 90];
+
+  const timers = [];
+  milestones.forEach((sec) => {
+    const seconds = Number(sec);
+    if (!Number.isFinite(seconds) || seconds <= 0) return;
+
+    const timer = window.setTimeout(() => {
+      const event = {
+        type: eventType,
+        entity_type: entityType,
+        meta: {
+          ...baseMeta,
+          sec: seconds
+        }
+      };
+      if (entityID > 0) {
+        event.entity_id = entityID;
+      }
+      sendEvents([event]);
+    }, seconds * 1000);
+    timers.push(timer);
+  });
+
+  return () => {
+    timers.forEach((timer) => {
+      window.clearTimeout(timer);
+    });
+  };
 };
 
 const trackPostEngagement = (postId, options = {}) => {
   if (!postId) return;
+  const promoContext = { entityType: "POST", entityID: Number(postId) };
   const promoEligible = options.promoEligible === true;
   const milestones = [25, 50, 75, 90];
   const seen = new Set();
@@ -5253,9 +8329,9 @@ const trackPostEngagement = (postId, options = {}) => {
 
     if (!promoEligible) return;
     try {
-      const promo = await decidePromo("MODAL_ON_COMPLETE", postId);
+      const promo = await decidePromo("MODAL_ON_COMPLETE", promoContext);
       if (promo) {
-        showCompletionModal(promo, postId);
+        showCompletionModal(promo, promoContext);
       }
     } catch (err) {
       console.error(err);
@@ -5273,7 +8349,7 @@ const trackPostEngagement = (postId, options = {}) => {
     milestones.forEach((m) => {
       if (pct >= m && !seen.has(`scroll_${m}`)) {
         seen.add(`scroll_${m}`);
-        sendEvents([{ type: "scroll_depth", entity_type: "POST", entity_id: postId, meta: { pct: m } }]);
+        sendEvents([{ type: "post_scroll_depth", entity_type: "POST", entity_id: postId, meta: { pct: m } }]);
       }
     });
   };
@@ -5281,7 +8357,7 @@ const trackPostEngagement = (postId, options = {}) => {
 
   timeMilestones.forEach((sec) => {
     setTimeout(() => {
-      sendEvents([{ type: "time_on_page", entity_type: "POST", entity_id: postId, meta: { sec } }]);
+      sendEvents([{ type: "post_time_on_page", entity_type: "POST", entity_id: postId, meta: { sec } }]);
       if (sec === 45 && !timeComplete) {
         timeComplete = true;
         maybeComplete();
@@ -5290,7 +8366,8 @@ const trackPostEngagement = (postId, options = {}) => {
   });
 };
 
-const showCompletionModal = (promo, postId) => {
+const showCompletionModal = (promo, promoContextInput = {}) => {
+  const promoContext = normalizePromoContext(promoContextInput);
   const overlay = document.createElement("div");
   overlay.className = "fixed inset-0 bg-black/70 flex items-center justify-center z-50";
   overlay.innerHTML = `
@@ -5304,17 +8381,11 @@ const showCompletionModal = (promo, postId) => {
   `;
   document.body.appendChild(overlay);
 
-  logPromo("impression", promo, postId);
+  logPromo("impression", promo, promoContext);
 
   overlay.querySelector("[data-primary]").addEventListener("click", () => {
-    logPromo("click", promo, postId);
-    if (promo.cta_action === "OPEN_PRICING") {
-      window.location.href = "/pricing";
-    }
-    if (promo.cta_action === "START_CHECKOUT") {
-      const plan = promo.cta_payload?.plan_default || "monthly";
-      openCheckout(plan);
-    }
+    logPromo("click", promo, promoContext);
+    handlePromoCTAAction(promo);
     overlay.remove();
   });
 

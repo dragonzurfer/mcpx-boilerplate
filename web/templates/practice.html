@@ -3,18 +3,39 @@
   {{ template "nav" . }}
 
   <main class="px-6 lg:px-16 pb-24">
-    <section class="max-w-4xl">
-      <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Practice</p>
-      <h1 class="mt-3 font-display text-3xl lg:text-5xl text-ink">Problem library</h1>
-      <p class="mt-4 text-slate-600 text-lg">Sharpen your skills with curated problems, clear difficulty tags, and focused practice sessions.</p>
-    </section>
+    <div class="mx-auto w-full max-w-[1152px] px-0 lg:px-6 py-16 lg:py-20">
+      <section class="max-w-[672px]">
+        <h1 class="font-display text-[38px] leading-[42px] lg:text-[44px] lg:leading-[48px] text-ink">Problem Library</h1>
+        <p class="mt-4 text-[20px] leading-8 text-slate-600">Master the patterns of technical interviews with our hand-picked collection of coding challenges.</p>
+      </section>
 
-    <div id="problems-loader" class="mt-10 flex justify-center items-center h-40">
-      <div class="animate-spin h-6 w-6 rounded-full border-2 border-slate-300 border-t-transparent"></div>
-      <p class="ml-4 text-lg text-slate-600">Loading problems...</p>
+      <section class="mt-8 max-w-[672px] relative">
+        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" class="block">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"></circle>
+            <path d="M20 20L16.65 16.65" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+          </svg>
+        </span>
+        <input id="practice-list-search" type="search" placeholder="Search all problems, tags, or difficulty..." class="w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 py-4 text-sm text-slate-700 shadow-sm focus:border-primary/60 focus:outline-none" />
+      </section>
+
+      <section class="mt-12 grid gap-10 xl:grid-cols-[720px_336px] xl:items-start">
+        <div>
+          <div id="problem-lists-loader" class="mt-4 flex justify-center items-center h-40">
+            <div class="animate-spin h-6 w-6 rounded-full border-2 border-slate-300 border-t-transparent"></div>
+            <p class="ml-4 text-lg text-slate-600">Loading problem lists...</p>
+          </div>
+
+          <div id="problem-lists-empty" class="hidden mt-4 rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600"></div>
+
+          <section class="space-y-10 hidden" id="problem-lists" hidden></section>
+        </div>
+
+        <aside class="hidden xl:block">
+          <div id="practice-stats" class="hidden sticky top-24 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"></div>
+        </aside>
+      </section>
     </div>
-
-    <section class="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-3 hidden" id="problems-grid" hidden></section>
   </main>
 </div>
 {{ end }}

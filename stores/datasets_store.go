@@ -288,7 +288,7 @@ func (s *Store) ListTestcases(input TestcaseListInput) (TestcaseListOutput, erro
 
 	testcaseModels := []TestcaseModel{}
 	if err := s.db.Where("dataset_id = ?", input.DatasetID).
-		Order("group asc, position asc, id asc").
+		Order("`group` asc, position asc, id asc").
 		Find(&testcaseModels).Error; err != nil {
 		return TestcaseListOutput{}, err
 	}

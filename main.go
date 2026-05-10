@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -60,8 +63,25 @@ func main() {
 	analysisService := &services.AIAnalysisService{Store: store, AI: geminiClient, Logger: logger}
 	judgeService := &services.JudgeService{
 		Store:  store,
-		Runner: &services.LocalRunner{WorkDir: getEnv("JUDGE_WORKDIR", "")},
+		Runner: buildJudgeRunner(logger),
 		Logger: logger,
+	}
+
+	appMode := resolveAppMode(logger)
+
+	if appModeRunsBackgroundJobs(appMode) {
+		startBackgroundJobs(backgroundJobsInput{
+			Store:         store,
+			FunnelService: funnelService,
+			JudgeService:  judgeService,
+			Logger:        logger,
+		})
+	}
+
+	if !appModeServesHTTP(appMode) {
+		logger.Printf("info [main]: worker mode active")
+		waitForShutdownSignal(logger)
+		return
 	}
 
 	templates, err := routes.LoadTemplates()
@@ -122,6 +142,11 @@ func main() {
 
 	paymentsHandler := &routes.PaymentsHandler{Store: store, Plans: plans, Logger: logger}
 	paymentsHandler.RegisterPublic(api)
+	desktopHandler := &routes.DesktopHandler{Store: store, Logger: logger}
+	desktopAPIGlobalLimiter := middleware.GlobalRateLimiter(100, time.Second)
+	desktopPublic := api.Group("")
+	desktopPublic.Use(desktopAPIGlobalLimiter)
+	desktopHandler.RegisterPublic(desktopPublic)
 
 	authed := api.Group("")
 	authed.Use(middleware.Auth(store, logger))
@@ -130,6 +155,9 @@ func main() {
 	meHandler := &routes.MeHandler{Store: store}
 	meHandler.Register(authed)
 	paymentsHandler.RegisterAuthed(authed)
+	desktopAuthed := authed.Group("")
+	desktopAuthed.Use(desktopAPIGlobalLimiter)
+	desktopHandler.RegisterAuthed(desktopAuthed)
 
 	submissionsHandler := &routes.SubmissionsHandler{Store: store}
 	submissionsHandler.Register(authed)
@@ -149,6 +177,9 @@ func main() {
 
 	adminProblems := &routes.AdminProblemsHandler{Store: store}
 	adminProblems.Register(admin)
+
+	adminProblemLists := &routes.AdminProblemListsHandler{Store: store}
+	adminProblemLists.Register(admin)
 
 	adminProblemDatasets := &routes.AdminProblemDatasetsHandler{Store: store}
 	adminProblemDatasets.Register(admin)
@@ -177,15 +208,8 @@ func main() {
 	adminSettings := &routes.AdminSettingsHandler{Store: store}
 	adminSettings.Register(admin)
 
-	startBackgroundJobs(backgroundJobsInput{
-		Store:         store,
-		FunnelService: funnelService,
-		JudgeService:  judgeService,
-		Logger:        logger,
-	})
-
 	port := getEnv("APP_PORT", "8080")
-	logger.Printf("info [main]: starting server on :%s", port)
+	logger.Printf("info [main]: starting server mode=%s on :%s", appMode, port)
 	if err := r.Run(":" + port); err != nil {
 		logger.Fatalf("error [main.Run]: %v", err)
 	}
@@ -204,9 +228,10 @@ func startBackgroundJobs(input backgroundJobsInput) {
 	startPostAnalyticsJob(analyticsJobInput{Store: input.Store, Logger: input.Logger})
 	startToolAnalyticsJob(analyticsJobInput{Store: input.Store, Logger: input.Logger})
 	startJudgeWorker(judgeWorkerInput{
-		Service:  input.JudgeService,
-		Logger:   input.Logger,
-		Interval: judgePollInterval(),
+		Service:     input.JudgeService,
+		Logger:      input.Logger,
+		Interval:    judgePollInterval(),
+		Concurrency: judgeWorkerConcurrency(),
 	})
 }
 
@@ -306,9 +331,10 @@ func startToolAnalyticsJob(input analyticsJobInput) {
 }
 
 type judgeWorkerInput struct {
-	Service  *services.JudgeService
-	Logger   *log.Logger
-	Interval time.Duration
+	Service     *services.JudgeService
+	Logger      *log.Logger
+	Interval    time.Duration
+	Concurrency int
 }
 
 func startJudgeWorker(input judgeWorkerInput) {
@@ -316,13 +342,29 @@ func startJudgeWorker(input judgeWorkerInput) {
 		return
 	}
 
-	interval := input.Interval
-	if interval <= 0 {
-		interval = 2 * time.Second
-	}
+	workerCount := normalizeJudgeWorkerConcurrency(input.Concurrency)
+	interval := normalizeJudgePollInterval(input.Interval)
 
+	input.Logger.Printf("info [judge]: starting worker loops=%d", workerCount)
+
+	for workerIndex := 0; workerIndex < workerCount; workerIndex++ {
+		runJudgeWorkerLoop(judgeWorkerLoopInput{
+			Service:  input.Service,
+			Logger:   input.Logger,
+			Interval: interval,
+		})
+	}
+}
+
+type judgeWorkerLoopInput struct {
+	Service  *services.JudgeService
+	Logger   *log.Logger
+	Interval time.Duration
+}
+
+func runJudgeWorkerLoop(input judgeWorkerLoopInput) {
 	go func() {
-		ticker := time.NewTicker(interval)
+		ticker := time.NewTicker(input.Interval)
 		defer ticker.Stop()
 
 		for {
@@ -363,6 +405,171 @@ func judgePollInterval() time.Duration {
 	}
 	if ms < 200 {
 		ms = 200
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+func judgeWorkerConcurrency() int {
+	raw := strings.TrimSpace(getEnv("JUDGE_WORKER_CONCURRENCY", "1"))
+	count, err := strconv.Atoi(raw)
+	if err != nil || count <= 0 {
+		return 1
+	}
+	return count
+}
+
+func normalizeJudgeWorkerConcurrency(count int) int {
+	if count <= 0 {
+		return 1
+	}
+	if count > 16 {
+		return 16
+	}
+	return count
+}
+
+func normalizeJudgePollInterval(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return 2 * time.Second
+	}
+	return interval
+}
+
+func resolveAppMode(logger *log.Logger) string {
+	rawMode := strings.ToLower(strings.TrimSpace(getEnv("APP_MODE", "all")))
+
+	switch rawMode {
+	case "", "all":
+		return "all"
+	case "web", "worker":
+		return rawMode
+	default:
+		if logger != nil {
+			logger.Printf("warn [main]: invalid APP_MODE=%q, defaulting to all", rawMode)
+		}
+		return "all"
+	}
+}
+
+func appModeRunsBackgroundJobs(appMode string) bool {
+	return appMode == "all" || appMode == "worker"
+}
+
+func appModeServesHTTP(appMode string) bool {
+	return appMode == "all" || appMode == "web"
+}
+
+func waitForShutdownSignal(logger *log.Logger) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if logger != nil {
+		logger.Printf("info [main]: waiting for shutdown signal")
+	}
+
+	<-ctx.Done()
+
+	if logger != nil {
+		logger.Printf("info [main]: shutdown signal received")
+	}
+}
+
+func buildJudgeRunner(logger *log.Logger) services.Runner {
+	runnerType := strings.ToLower(strings.TrimSpace(getEnv("JUDGE_RUNNER", "docker")))
+	workDir := getEnv("JUDGE_WORKDIR", "")
+
+	if runnerType == "k8s" {
+		runner := &services.K8sJobRunner{
+			Namespace:      resolveJudgeNamespace(),
+			Image:          getEnv("JUDGE_K8S_IMAGE", ""),
+			ServiceAccount: getEnv("JUDGE_K8S_SERVICE_ACCOUNT", ""),
+			CPULimit:       normalizeCPUQuantity(getEnv("JUDGE_K8S_CPU", "1")),
+			PollInterval:   parseDurationMs(getEnv("JUDGE_K8S_POLL_INTERVAL_MS", "350")),
+			JobTTLSeconds:  int32(parsePositiveInt(getEnv("JUDGE_K8S_JOB_TTL_SECONDS", "120"), 120)),
+			KubectlBin:     getEnv("JUDGE_K8S_KUBECTL_BIN", "kubectl"),
+			KubeconfigPath: getEnv("JUDGE_K8S_KUBECONFIG", ""),
+		}
+		if logger != nil {
+			logger.Printf("info [judge]: runner=k8s")
+		}
+		return runner
+	}
+
+	if runnerType == "" || runnerType == "docker" {
+		runner := &services.DockerRunner{
+			WorkDir:      workDir,
+			DockerBin:    getEnv("JUDGE_DOCKER_BIN", "docker"),
+			Image:        getEnv("JUDGE_DOCKER_IMAGE", ""),
+			GoImage:      getEnv("JUDGE_DOCKER_IMAGE_GO", ""),
+			CImage:       getEnv("JUDGE_DOCKER_IMAGE_C", ""),
+			CppImage:     getEnv("JUDGE_DOCKER_IMAGE_CPP", ""),
+			JavaImage:    getEnv("JUDGE_DOCKER_IMAGE_JAVA", ""),
+			CPULimit:     normalizeCPUQuantity(getEnv("JUDGE_DOCKER_CPUS", "1")),
+			TmpfsSizeMb:  parsePositiveInt(getEnv("JUDGE_DOCKER_TMPFS_MB", "64"), 64),
+			PidsLimit:    parsePositiveInt(getEnv("JUDGE_DOCKER_PIDS_LIMIT", "128"), 128),
+			CompileLimit: parseDurationMs(getEnv("JUDGE_DOCKER_COMPILE_TIMEOUT_MS", "0")),
+			CompileMemMb: parsePositiveInt(getEnv("JUDGE_DOCKER_COMPILE_MEMORY_MB", "512"), 512),
+		}
+		if logger != nil {
+			logger.Printf("info [judge]: runner=docker")
+		}
+		return runner
+	}
+
+	if logger != nil {
+		logger.Printf("warn [judge]: runner=local (sandbox disabled)")
+	}
+	return &services.LocalRunner{WorkDir: workDir}
+}
+
+func normalizeCPUQuantity(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "1"
+	}
+
+	if strings.HasSuffix(trimmed, "m") {
+		number := strings.TrimSuffix(trimmed, "m")
+		milliValue, err := strconv.Atoi(number)
+		if err != nil || milliValue <= 0 {
+			return "1"
+		}
+		return strconv.Itoa(milliValue) + "m"
+	}
+
+	value, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil || value <= 0 {
+		return "1"
+	}
+	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+func resolveJudgeNamespace() string {
+	namespace := strings.TrimSpace(getEnv("JUDGE_K8S_NAMESPACE", ""))
+	if namespace != "" {
+		return namespace
+	}
+
+	return strings.TrimSpace(getEnv("POD_NAMESPACE", ""))
+}
+
+func parsePositiveInt(raw string, fallback int) int {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fallback
+	}
+
+	value, err := strconv.Atoi(trimmed)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func parseDurationMs(raw string) time.Duration {
+	ms := parsePositiveInt(raw, 0)
+	if ms <= 0 {
+		return 0
 	}
 	return time.Duration(ms) * time.Millisecond
 }

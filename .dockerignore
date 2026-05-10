@@ -1,10 +1,8 @@
-.git
-.DS_Store
-logs
-tripit-app
-*.log
-*.db
-node_modules
-coverage.out
 .env
-
+.env.*
+.git
+.gitignore
+logs
+tmp
+mobile
+debug_test_py_service_account

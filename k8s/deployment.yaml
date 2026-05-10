@@ -11,7 +11,9 @@ spec:
     metadata:
       labels:
         app: __APP_NAME__
+__POD_ANNOTATIONS__
     spec:
+__RUNTIME_CLASS__
       __NODE_SELECTOR__
       containers:
         - name: __APP_NAME__
@@ -22,6 +24,7 @@ spec:
           env:
             - name: APP_PORT
               value: "8080"
+__JUDGE_RUNNER_ENV__
           envFrom:
             - secretRef:
                 name: __APP_NAME__-env
@@ -52,3 +55,5 @@ spec:
             limits:
               cpu: "750m"
               memory: "1Gi"
+__JUDGE_DIND_SIDECAR__
+__JUDGE_DIND_VOLUMES__

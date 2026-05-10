@@ -114,6 +114,16 @@ const (
 )
 
 const (
+	DesktopLoginSessionStatusPending  = "PENDING"
+	DesktopLoginSessionStatusApproved = "APPROVED"
+	DesktopLoginSessionStatusExpired  = "EXPIRED"
+)
+
+const (
+	DesktopExportStatusCompleted = "COMPLETED"
+)
+
+const (
 	PromoStatusActive = "ACTIVE"
 	PromoStatusPaused = "PAUSED"
 )

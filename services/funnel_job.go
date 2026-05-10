@@ -93,7 +93,8 @@ func (s *FunnelService) loadWeights() (map[string]int, error) {
 	weights := map[string]int{}
 	for _, row := range rows {
 		if row.Enabled {
-			weights[row.EventType] = row.Weight
+			eventType := stores.CanonicalFunnelEventType(row.EventType)
+			weights[eventType] = row.Weight
 		}
 	}
 	return weights, nil
@@ -124,7 +125,8 @@ func defaultWeights() map[string]int {
 	weights := map[string]int{}
 	for _, row := range stores.DefaultFunnelEventWeights() {
 		if row.Enabled {
-			weights[row.EventType] = row.Weight
+			eventType := stores.CanonicalFunnelEventType(row.EventType)
+			weights[eventType] = row.Weight
 		}
 	}
 	return weights

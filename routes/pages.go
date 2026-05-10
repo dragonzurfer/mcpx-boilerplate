@@ -29,9 +29,12 @@ func LoadTemplates() (map[string]*template.Template, error) {
 		"pricing":              filepath.Join("web", "templates", "pricing.html"),
 		"tools":                filepath.Join("web", "templates", "tools.html"),
 		"tool":                 filepath.Join("web", "templates", "tool.html"),
+		"tool_desktop":         filepath.Join("web", "templates", "tool_desktop.html"),
 		"courses":              filepath.Join("web", "templates", "courses.html"),
 		"course":               filepath.Join("web", "templates", "course.html"),
 		"practice":             filepath.Join("web", "templates", "practice.html"),
+		"practice_problem":     filepath.Join("web", "templates", "practice_problem.html"),
+		"desktop_link":         filepath.Join("web", "templates", "desktop_link.html"),
 		"account":              filepath.Join("web", "templates", "account.html"),
 		"admin_dashboard":      filepath.Join("web", "templates", "admin_dashboard.html"),
 		"admin_posts":          filepath.Join("web", "templates", "admin_posts.html"),
@@ -66,6 +69,8 @@ func (h *PageHandler) Register(r *gin.Engine) {
 	r.GET("/courses", h.courses)
 	r.GET("/course/:slug", h.course)
 	r.GET("/practice", h.practice)
+	r.GET("/practice/:slug", h.practiceProblem)
+	r.GET("/desktop/link", h.desktopLink)
 	r.GET("/account", h.account)
 	r.GET("/admin", h.adminDashboard)
 	r.GET("/admin/posts", h.adminPosts)
@@ -132,6 +137,10 @@ func (h *PageHandler) tool(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "slug required"})
 		return
 	}
+	if slug == "onesub-desktop" {
+		h.toolDesktop(c)
+		return
+	}
 
 	tool, err := h.Store.GetToolBySlug(slug)
 	if err != nil {
@@ -150,6 +159,20 @@ func (h *PageHandler) tool(c *gin.Context) {
 
 	data := pageData{Meta: meta, JSONLD: template.JS(""), Theme: resolveTheme(settings)}
 	h.renderTemplate(c, "tool", data)
+}
+
+func (h *PageHandler) toolDesktop(c *gin.Context) {
+	settings := h.resolveSiteSettings()
+	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
+	meta.Title = "OneSub Desktop | " + meta.SiteName
+	meta.Description = "Download OneSub Desktop for macOS or Windows. Sign in to Explore to access installers."
+	if settings.SiteURL != "" {
+		meta.CanonicalURL = strings.TrimRight(settings.SiteURL, "/") + "/tools/onesub-desktop"
+	}
+	meta.JSONLD = ""
+
+	data := pageData{Meta: meta, JSONLD: template.JS(""), Theme: resolveTheme(settings)}
+	h.renderTemplate(c, "tool_desktop", data)
 }
 
 func (h *PageHandler) adminAnalytics(c *gin.Context) {
@@ -199,6 +222,47 @@ func (h *PageHandler) practice(c *gin.Context) {
 
 	data := pageData{Meta: meta, JSONLD: template.JS(""), Theme: resolveTheme(settings)}
 	h.renderTemplate(c, "practice", data)
+}
+
+func (h *PageHandler) practiceProblem(c *gin.Context) {
+	slug := strings.TrimSpace(c.Param("slug"))
+	if slug == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "slug required"})
+		return
+	}
+
+	problem, err := h.Store.GetProblemBySlug(stores.ProblemLookupInput{Slug: slug})
+	if err != nil || strings.ToUpper(strings.TrimSpace(problem.Status)) != stores.ProblemStatusPublished {
+		c.JSON(http.StatusNotFound, gin.H{"error": "problem not found"})
+		return
+	}
+
+	settings := h.resolveSiteSettings()
+	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
+	meta.Title = problem.Title + " | " + meta.SiteName
+	meta.Description = "Solve the " + problem.Title + " coding challenge with curated tests."
+	if settings.SiteURL != "" {
+		meta.CanonicalURL = settings.SiteURL + "/practice/" + problem.Slug
+	}
+	meta.JSONLD = ""
+
+	data := pageData{Meta: meta, JSONLD: template.JS(""), Theme: resolveTheme(settings)}
+	h.renderTemplate(c, "practice_problem", data)
+}
+
+func (h *PageHandler) desktopLink(c *gin.Context) {
+	settings := h.resolveSiteSettings()
+	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
+	meta.Title = "Link OneSub Desktop | " + meta.SiteName
+	meta.Description = "Approve your OneSub Desktop device after signing in to Explore."
+	meta.Robots = "noindex,nofollow"
+	if settings.SiteURL != "" {
+		meta.CanonicalURL = settings.SiteURL + "/desktop/link"
+	}
+	meta.JSONLD = ""
+
+	data := pageData{Meta: meta, JSONLD: template.JS(""), Theme: resolveTheme(settings)}
+	h.renderTemplate(c, "desktop_link", data)
 }
 
 func (h *PageHandler) course(c *gin.Context) {

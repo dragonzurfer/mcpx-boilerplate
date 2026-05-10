@@ -1,0 +1,357 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="tool-desktop">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24 pt-10">
+    <section class="max-w-4xl">
+      <p class="text-skyline uppercase tracking-[0.35em] text-xs font-semibold">Tool</p>
+      <h1 class="mt-4 font-display text-4xl lg:text-6xl text-ink">OneSub Desktop</h1>
+      <p class="mt-4 text-slate-600 text-lg">
+        Download the desktop subtitle editor for macOS or Windows. Sign in to Explore to access the installer.
+      </p>
+      <div class="mt-6 flex flex-wrap gap-3 text-sm">
+        <span class="rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-slate-700">Sign-in required</span>
+        <span class="rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-slate-700">Local rendering app</span>
+        <span class="rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-slate-700">macOS + Windows</span>
+      </div>
+    </section>
+
+    <section class="mt-10 grid gap-6 lg:grid-cols-2" id="desktop-download-grid">
+      <article
+        data-os-card="mac"
+        class="rounded-3xl border border-slate-200/70 bg-white/90 p-6 shadow-sm"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="h-12 w-12 rounded-2xl bg-slate-900 text-white grid place-items-center text-2xl leading-none"></div>
+            <div>
+              <h2 class="font-display text-2xl text-ink">macOS</h2>
+              <p class="text-sm text-slate-600">Download the DMG installer for your Mac.</p>
+            </div>
+          </div>
+          <span data-recommended-badge="mac" class="hidden rounded-full bg-skyline/10 px-3 py-1 text-xs font-semibold text-skyline">Recommended</span>
+        </div>
+
+        <div class="mt-6 grid gap-3">
+          <button
+            type="button"
+            data-installer-btn
+            data-platform="mac"
+            data-arch="arm64"
+            class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-skyline/60 transition"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="font-semibold text-ink">Mac (Apple Silicon)</div>
+                <div class="text-xs text-slate-500 mt-1">M1 / M2 / M3 / M4 • `.dmg`</div>
+              </div>
+              <span class="text-skyline text-sm font-semibold">Download</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            data-installer-btn
+            data-platform="mac"
+            data-arch="x64"
+            class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-skyline/60 transition"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="font-semibold text-ink">Mac (Intel)</div>
+                <div class="text-xs text-slate-500 mt-1">Intel Macs • `.dmg`</div>
+              </div>
+              <span class="text-skyline text-sm font-semibold">Download</span>
+            </div>
+          </button>
+        </div>
+      </article>
+
+      <article
+        data-os-card="windows"
+        class="rounded-3xl border border-slate-200/70 bg-white/90 p-6 shadow-sm"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="h-12 w-12 rounded-2xl bg-[#0078d4] grid place-items-center">
+              <div class="grid grid-cols-2 gap-0.5 h-6 w-6">
+                <span class="bg-white rounded-[1px]"></span>
+                <span class="bg-white rounded-[1px]"></span>
+                <span class="bg-white rounded-[1px]"></span>
+                <span class="bg-white rounded-[1px]"></span>
+              </div>
+            </div>
+            <div>
+              <h2 class="font-display text-2xl text-ink">Windows</h2>
+              <p class="text-sm text-slate-600">Download the Windows installer (`.exe`).</p>
+            </div>
+          </div>
+          <span data-recommended-badge="windows" class="hidden rounded-full bg-skyline/10 px-3 py-1 text-xs font-semibold text-skyline">Recommended</span>
+        </div>
+
+        <div class="mt-6 grid gap-3">
+          <button
+            type="button"
+            data-installer-btn
+            data-platform="windows"
+            data-arch="x64"
+            class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-skyline/60 transition"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="font-semibold text-ink">Windows Installer (x64)</div>
+                <div class="text-xs text-slate-500 mt-1">NSIS installer • `.exe`</div>
+              </div>
+              <span class="text-skyline text-sm font-semibold">Download</span>
+            </div>
+          </button>
+        </div>
+      </article>
+    </section>
+
+    <div class="mt-6 flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        id="desktop-show-all"
+        class="hidden rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-sm text-slate-700 hover:border-skyline/50"
+      >
+        Show all installers
+      </button>
+      <a
+        href="/account"
+        id="desktop-signin-cta"
+        class="hidden rounded-full bg-skyline px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-skyline/20"
+      >
+        Sign in to Explore
+      </a>
+      <p id="desktop-download-note" class="text-sm text-slate-600"></p>
+    </div>
+
+    <div id="desktop-download-status" class="mt-4 hidden rounded-2xl border px-4 py-3 text-sm"></div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const grid = document.getElementById("desktop-download-grid");
+  const statusEl = document.getElementById("desktop-download-status");
+  const noteEl = document.getElementById("desktop-download-note");
+  const showAllBtn = document.getElementById("desktop-show-all");
+  const signInBtn = document.getElementById("desktop-signin-cta");
+  const cards = Array.from(document.querySelectorAll("[data-os-card]"));
+  const buttons = Array.from(document.querySelectorAll("[data-installer-btn]"));
+  const badges = Array.from(document.querySelectorAll("[data-recommended-badge]"));
+
+  const getToken = () => {
+    try {
+      return localStorage.getItem("jwt");
+    } catch {
+      return null;
+    }
+  };
+
+  const setStatus = (message, tone = "info") => {
+    if (!statusEl) return;
+    if (!message) {
+      statusEl.className = "mt-4 hidden rounded-2xl border px-4 py-3 text-sm";
+      statusEl.textContent = "";
+      return;
+    }
+    const toneClass = tone === "error"
+      ? "border-rose-200 bg-rose-50 text-rose-700"
+      : "border-skyline/20 bg-skyline/5 text-slate-700";
+    statusEl.className = `mt-4 rounded-2xl border px-4 py-3 text-sm ${toneClass}`;
+    statusEl.textContent = message;
+  };
+
+  const detectOS = () => {
+    const platform = String(navigator.platform || "").toLowerCase();
+    const ua = String(navigator.userAgent || "").toLowerCase();
+    if (platform.includes("mac") || ua.includes("macintosh") || ua.includes("mac os")) return "mac";
+    if (platform.includes("win") || ua.includes("windows")) return "windows";
+    return "other";
+  };
+
+  const detectArchHint = () => {
+    try {
+      const arch = navigator.userAgentData && typeof navigator.userAgentData.architecture === "string"
+        ? navigator.userAgentData.architecture
+        : "";
+      if (arch) return arch.toLowerCase();
+    } catch {}
+    const ua = String(navigator.userAgent || "").toLowerCase();
+    if (ua.includes("arm64") || ua.includes("aarch64") || ua.includes("apple silicon")) return "arm64";
+    return "";
+  };
+
+  const parseFilename = (contentDisposition) => {
+    if (!contentDisposition) return "";
+    const utf8Match = contentDisposition.match(/filename\\*=UTF-8''([^;]+)/i);
+    if (utf8Match && utf8Match[1]) {
+      try {
+        return decodeURIComponent(utf8Match[1]);
+      } catch {}
+    }
+    const plainMatch = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+    return plainMatch && plainMatch[1] ? plainMatch[1] : "";
+  };
+
+  const setButtonsLoading = (activeButton, loading) => {
+    buttons.forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) return;
+      if (loading) {
+        button.disabled = true;
+        if (button === activeButton) {
+          button.dataset.originalLabel = button.innerHTML;
+          button.innerHTML = `
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="font-semibold text-ink">Preparing download...</div>
+                <div class="text-xs text-slate-500 mt-1">Please wait</div>
+              </div>
+              <span class="inline-flex h-5 w-5 rounded-full border-2 border-slate-300 border-t-skyline animate-spin"></span>
+            </div>
+          `;
+        }
+      } else {
+        button.disabled = false;
+        if (button.dataset.originalLabel) {
+          button.innerHTML = button.dataset.originalLabel;
+          delete button.dataset.originalLabel;
+        }
+      }
+    });
+  };
+
+  const applyOSLayout = () => {
+    const detected = detectOS();
+    badges.forEach((badge) => badge.classList.add("hidden"));
+    if (showAllBtn) showAllBtn.classList.add("hidden");
+
+    if (detected === "mac" || detected === "windows") {
+      cards.forEach((card) => {
+        if (!(card instanceof HTMLElement)) return;
+        const isMatch = card.dataset.osCard === detected;
+        card.classList.toggle("hidden", !isMatch);
+      });
+      const badge = document.querySelector(`[data-recommended-badge="${detected}"]`);
+      if (badge) badge.classList.remove("hidden");
+      if (showAllBtn && cards.length > 1) {
+        showAllBtn.classList.remove("hidden");
+      }
+      if (noteEl) {
+        noteEl.textContent = detected === "mac"
+          ? "Showing macOS installers for your device."
+          : "Showing the Windows installer for your device.";
+      }
+      return;
+    }
+
+    cards.forEach((card) => card.classList.remove("hidden"));
+    if (noteEl) {
+      noteEl.textContent = "We couldn't detect your OS. Choose the installer manually.";
+    }
+  };
+
+  const openAllInstallers = () => {
+    cards.forEach((card) => card.classList.remove("hidden"));
+    if (showAllBtn) showAllBtn.classList.add("hidden");
+    if (noteEl) {
+      noteEl.textContent = "Showing all installers.";
+    }
+  };
+
+  const downloadInstaller = async (button) => {
+    const token = getToken();
+    if (!token) {
+      if (signInBtn) signInBtn.classList.remove("hidden");
+      setStatus("Please sign in to Explore to download the desktop installer.", "error");
+      return;
+    }
+
+    const platform = button.dataset.platform || "";
+    let arch = button.dataset.arch || "";
+    if (platform === "mac" && !arch) {
+      const archHint = detectArchHint();
+      arch = archHint.includes("arm") ? "arm64" : "x64";
+    }
+
+    const url = new URL("/api/desktop/download", window.location.origin);
+    url.searchParams.set("platform", platform);
+    if (arch) {
+      url.searchParams.set("arch", arch);
+    }
+
+    setStatus("Preparing your download...", "info");
+    setButtonsLoading(button, true);
+
+    try {
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.status === 401) {
+        if (signInBtn) signInBtn.classList.remove("hidden");
+        throw new Error("Please sign in again to download.");
+      }
+
+      if (!response.ok) {
+        let message = "Download failed.";
+        try {
+          const payload = await response.json();
+          if (payload && typeof payload.error === "string" && payload.error) {
+            message = payload.error;
+          }
+        } catch {}
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const headerName = parseFilename(response.headers.get("content-disposition") || "");
+      const fallbackName = platform === "windows"
+        ? "OneSub-setup.exe"
+        : (arch === "x64" ? "OneSub-mac-intel.dmg" : "OneSub-mac.dmg");
+      const fileName = headerName || fallbackName;
+
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+      setStatus(`Download started: ${fileName}`, "info");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Download failed.";
+      setStatus(message, "error");
+    } finally {
+      setButtonsLoading(button, false);
+    }
+  };
+
+  if (showAllBtn) {
+    showAllBtn.addEventListener("click", openAllInstallers);
+  }
+
+  buttons.forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.addEventListener("click", () => {
+      void downloadInstaller(button);
+    });
+  });
+
+  if (signInBtn) {
+    signInBtn.classList.toggle("hidden", Boolean(getToken()));
+  }
+
+  applyOSLayout();
+  if (grid) {
+    grid.classList.remove("opacity-0");
+  }
+})();
+</script>
+{{ end }}

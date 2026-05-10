@@ -31,14 +31,34 @@ Days are calculated as whole days between `event_time` and `now`.
 
 These are the default events used by the system:
 
-- `post_open`: 1x per post open
-- `scroll_depth`: fires multiple times per post (25/50/75/90% milestones)
-- `time_on_page`: fires at 15s, 45s, 90s
-- `post_complete`: fired after scroll + time milestones are both met
-- `promo_click`: when a promo CTA is clicked
-- `paywall_hit`: when a locked post is attempted
+### Post engagement
 
-> Note: `scroll_depth` and `time_on_page` are **multi‑fire** events, so their weights apply per milestone.
+- `post_open`: 1x per post open
+- `post_scroll_depth`: fires multiple times per post (25/50/75/90% milestones)
+- `post_time_on_page`: fires at 15s, 45s, 90s
+- `post_complete`: fired after scroll + time milestones are both met
+- `post_promo_click`: when a promo CTA is clicked
+- `post_paywall_hit`: when a locked post is attempted
+
+### Course engagement
+
+- `course_open_click`: click on a course card in the course library
+- `course_open`: opening a course page
+- `course_lesson_click`: selecting a lesson in a course
+- `course_time_on_page`: time milestones (15/45/90) on the course page
+- `course_lesson_time_on_page`: time milestones (15/45/90) inside lesson content
+
+### Practice engagement
+
+- `practice_problem_open`: opening a practice problem page
+- `practice_time_on_page`: time milestones (15/45/90) on the practice page
+- `practice_run_click`: run button click
+- `practice_submit_click`: submit button click
+- `practice_ai_analyze_click`: AI analysis click
+
+> Note: `post_scroll_depth`, `post_time_on_page`, `course_time_on_page`, `course_lesson_time_on_page`, and `practice_time_on_page` are **multi-fire** events, so their weights apply per milestone.
+>
+> Backward compatibility: legacy event names (`scroll_depth`, `time_on_page`, `promo_click`, `paywall_hit`) are normalized to the new `post_*` names in scoring.
 
 ## Admin settings and how they affect the score
 
@@ -77,12 +97,12 @@ These are the default events used by the system:
 Assume:
 - Scoring window = 14 days
 - Decay disabled
-- Weights: `post_open=1`, `scroll_depth=2`, `time_on_page=2`, `post_complete=5`
+- Weights: `post_open=1`, `post_scroll_depth=2`, `post_time_on_page=2`, `post_complete=5`
 
 User activity on a single post:
 - `post_open` (1x) → +1
-- `scroll_depth` fired 4 times (25/50/75/90) → +8
-- `time_on_page` fired 3 times (15/45/90) → +6
+- `post_scroll_depth` fired 4 times (25/50/75/90) → +8
+- `post_time_on_page` fired 3 times (15/45/90) → +6
 - `post_complete` (1x) → +5
 
 Total score from this post = **20**
@@ -109,4 +129,3 @@ A `post_complete` weight of 5 would contribute:
 - Scheduled updates: `services/funnel_job.go`
 - Admin config endpoints: `routes/admin_funnel.go`
 - Persistence: `stores/funnel_store.go`
-

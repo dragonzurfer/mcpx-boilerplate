@@ -49,3 +49,36 @@ func RateLimiter(maxRequests int, window time.Duration) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// GlobalRateLimiter caps all requests that pass through this middleware using a single shared bucket.
+func GlobalRateLimiter(maxRequests int, window time.Duration) gin.HandlerFunc {
+	var mu sync.Mutex
+	bucket := rateBucket{
+		count:    0,
+		resetsAt: time.Now(),
+	}
+
+	return func(c *gin.Context) {
+		now := time.Now()
+		mu.Lock()
+		if bucket.resetsAt.IsZero() || now.After(bucket.resetsAt) {
+			bucket.count = 0
+			bucket.resetsAt = now.Add(window)
+		}
+
+		if bucket.count >= maxRequests {
+			retry := int(time.Until(bucket.resetsAt).Seconds())
+			if retry < 1 {
+				retry = 1
+			}
+			mu.Unlock()
+			c.Header("Retry-After", fmt.Sprintf("%d", retry))
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
+			return
+		}
+
+		bucket.count++
+		mu.Unlock()
+		c.Next()
+	}
+}

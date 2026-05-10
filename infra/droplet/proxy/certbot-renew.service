@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew Droplet reverse-proxy certificates
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/droplet/proxy/renew_certificates.sh

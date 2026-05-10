@@ -1,0 +1,304 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="desktop-link">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-24">
+    <section class="max-w-3xl">
+      <p class="text-xs uppercase tracking-[0.3em] text-slate-500">OneSub Desktop</p>
+      <h1 class="mt-3 font-display text-3xl lg:text-5xl text-ink">Link this desktop app</h1>
+      <p class="mt-4 text-slate-600 text-lg">
+        Sign in to Explore, then approve the code shown in OneSub Desktop. This links the desktop app to your Explore account.
+      </p>
+    </section>
+
+    <div class="mt-10 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+      <section class="rounded-3xl border border-slate-200 bg-white/90 p-6 lg:p-8">
+        <div class="flex items-center justify-between gap-4">
+          <p class="text-xs uppercase tracking-wide text-slate-500">Approval</p>
+          <span id="desktop-link-status-pill" class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700">
+            Checking...
+          </span>
+        </div>
+
+        <div class="mt-5 grid gap-3 sm:grid-cols-[140px_1fr] sm:items-center">
+          <label for="desktop-link-code" class="text-sm text-slate-600">Desktop code</label>
+          <input
+            id="desktop-link-code"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="XXXX-XXXX"
+            class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-display text-lg tracking-[0.2em] uppercase text-ink focus:border-primary focus:outline-none"
+          />
+
+          <div class="text-sm text-slate-600">Sign-in state</div>
+          <div id="desktop-link-auth-state" class="text-sm text-slate-700">Checking local session...</div>
+        </div>
+
+        <div id="desktop-link-message" class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-700">
+          Loading...
+        </div>
+
+        <div id="desktop-link-error" class="hidden mt-4 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-700"></div>
+        <div id="desktop-link-success" class="hidden mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-700"></div>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <button
+            id="desktop-link-approve"
+            type="button"
+            class="rounded-full bg-primary px-6 py-3 text-white font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Approve Device
+          </button>
+          <button
+            id="desktop-link-refresh-login"
+            type="button"
+            class="rounded-full border border-slate-300 bg-white px-5 py-3 text-slate-700 font-semibold"
+          >
+            Refresh Login
+          </button>
+          <a
+            href="/pricing"
+            class="rounded-full border border-slate-300 bg-white px-5 py-3 text-slate-700 font-semibold"
+          >
+            Pricing
+          </a>
+          <a
+            href="/account"
+            class="rounded-full border border-slate-300 bg-white px-5 py-3 text-slate-700 font-semibold"
+          >
+            Account
+          </a>
+        </div>
+      </section>
+
+      <aside class="rounded-3xl border border-slate-200 bg-white/80 p-6">
+        <p class="text-xs uppercase tracking-wide text-slate-500">How it works</p>
+        <ol class="mt-4 space-y-3 text-sm text-slate-600 list-decimal list-inside">
+          <li>Open OneSub Desktop and copy the login code.</li>
+          <li>Sign in to Explore using Google (top-right).</li>
+          <li>Return here and click <span class="font-semibold text-ink">Approve Device</span>.</li>
+          <li>Go back to OneSub Desktop. It will finish sign-in automatically.</li>
+        </ol>
+
+        <div class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+          If approval fails with an expired code, start sign-in again from the desktop app to get a new code.
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      const codeInput = document.getElementById("desktop-link-code");
+      const approveButton = document.getElementById("desktop-link-approve");
+      const refreshLoginButton = document.getElementById("desktop-link-refresh-login");
+      const authStateEl = document.getElementById("desktop-link-auth-state");
+      const messageEl = document.getElementById("desktop-link-message");
+      const errorEl = document.getElementById("desktop-link-error");
+      const successEl = document.getElementById("desktop-link-success");
+      const statusPill = document.getElementById("desktop-link-status-pill");
+
+      const state = {
+        approving: false,
+        loggedIn: false,
+        user: null,
+        token: null,
+      };
+
+      const qs = new URLSearchParams(window.location.search);
+      const initialCode = normalizeCode(qs.get("code") || "");
+      if (initialCode) {
+        codeInput.value = initialCode;
+      }
+
+      codeInput.addEventListener("input", () => {
+        const normalized = normalizeCode(codeInput.value);
+        if (codeInput.value !== normalized) {
+          codeInput.value = normalized;
+        }
+      });
+
+      approveButton.addEventListener("click", () => {
+        void approve();
+      });
+      refreshLoginButton.addEventListener("click", () => {
+        refreshLoginState(true);
+      });
+
+      function normalizeCode(value) {
+        return String(value || "")
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "")
+          .slice(0, 8)
+          .replace(/^(.{4})(.{0,4}).*$/, (_m, first, second) => second ? `${first}-${second}` : first);
+      }
+
+      function getToken() {
+        try {
+          const token = window.localStorage.getItem("jwt");
+          return token && token.trim() ? token.trim() : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function getUser() {
+        try {
+          const raw = window.localStorage.getItem("user");
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed !== "object") return null;
+          return parsed;
+        } catch {
+          return null;
+        }
+      }
+
+      function setStatus(kind, text) {
+        statusPill.className = "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold";
+        if (kind === "success") {
+          statusPill.classList.add("bg-emerald-100", "text-emerald-700");
+        } else if (kind === "error") {
+          statusPill.classList.add("bg-rose-100", "text-rose-700");
+        } else if (kind === "warn") {
+          statusPill.classList.add("bg-amber-100", "text-amber-700");
+        } else {
+          statusPill.classList.add("bg-slate-100", "text-slate-700");
+        }
+        statusPill.textContent = text;
+      }
+
+      function setMessage(text) {
+        messageEl.textContent = text;
+      }
+
+      function setError(text) {
+        if (!text) {
+          errorEl.classList.add("hidden");
+          errorEl.textContent = "";
+          return;
+        }
+        errorEl.textContent = text;
+        errorEl.classList.remove("hidden");
+      }
+
+      function setSuccess(text) {
+        if (!text) {
+          successEl.classList.add("hidden");
+          successEl.textContent = "";
+          return;
+        }
+        successEl.textContent = text;
+        successEl.classList.remove("hidden");
+      }
+
+      function syncButtons() {
+        approveButton.disabled = state.approving;
+        approveButton.textContent = state.approving ? "Approving..." : "Approve Device";
+      }
+
+      async function refreshLoginState(announce) {
+        state.token = getToken();
+        state.user = getUser();
+        state.loggedIn = Boolean(state.token);
+
+        if (!state.loggedIn) {
+          authStateEl.textContent = "Not signed in. Use the Google sign-in button in the header, then click Refresh Login.";
+          setStatus("warn", "Sign-in required");
+          if (announce) {
+            setMessage("Sign in to Explore first, then approve the desktop code.");
+          } else {
+            setMessage("Waiting for you to sign in to Explore.");
+          }
+          return;
+        }
+
+        const email = state.user && typeof state.user.email === "string" ? state.user.email : "Signed in";
+        authStateEl.textContent = `Signed in as ${email}`;
+        setStatus("neutral", "Ready to approve");
+        if (announce) {
+          setMessage("You are signed in. Approve the desktop code to link OneSub.");
+        } else {
+          setMessage("Signed in detected. Approve the desktop code.");
+        }
+      }
+
+      async function approve() {
+        setError("");
+        setSuccess("");
+
+        const code = normalizeCode(codeInput.value);
+        codeInput.value = code;
+        if (!code || code.length !== 9) {
+          setStatus("warn", "Code required");
+          setError("Enter the 8-character desktop code shown in OneSub Desktop (format: XXXX-XXXX).");
+          return;
+        }
+
+        await refreshLoginState(false);
+        if (!state.loggedIn || !state.token) {
+          setError("Sign in to Explore first using the Google button in the header, then click Approve Device.");
+          return;
+        }
+
+        state.approving = true;
+        syncButtons();
+        setStatus("neutral", "Approving...");
+        setMessage("Approving this OneSub Desktop device...");
+
+        try {
+          const response = await fetch("/api/desktop/login/approve", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${state.token}`,
+            },
+            body: JSON.stringify({ user_code: code }),
+          });
+
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const serverError = payload && typeof payload.error === "string" ? payload.error : `Request failed (${response.status})`;
+            if (response.status === 401) {
+              setStatus("warn", "Sign-in required");
+              setError("Your Explore login is missing or expired. Sign in again and retry.");
+              setMessage("Sign in to Explore, then approve the desktop code.");
+              return;
+            }
+            if (response.status === 404) {
+              setStatus("error", "Code expired");
+              setError("Desktop code is invalid or expired. Start sign-in again from OneSub Desktop and use the new code.");
+              setMessage("Approval failed because the code is no longer valid.");
+              return;
+            }
+            setStatus("error", "Approval failed");
+            setError(serverError);
+            setMessage("Could not approve the desktop device.");
+            return;
+          }
+
+          setStatus("success", "Approved");
+          setSuccess("Desktop approved successfully. Return to OneSub Desktop. It will complete sign-in automatically.");
+          setMessage("Approval complete. You can close this tab.");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setStatus("error", "Network error");
+          setError(`Could not reach the server: ${message}`);
+          setMessage("Check your connection and try again.");
+        } finally {
+          state.approving = false;
+          syncButtons();
+        }
+      }
+
+      syncButtons();
+      void refreshLoginState(false).then(() => {
+        if (state.loggedIn && initialCode) {
+          void approve();
+        }
+      });
+    })();
+  </script>
+</div>
+{{ end }}

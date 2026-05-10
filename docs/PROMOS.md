@@ -2,18 +2,22 @@
 
 ## Purpose
 
-Promos are the conversion layer. They are shown **only on TRIAL content** and are selected based on funnel stage, caps, and cooldowns. Paid users never see promos.
+Promos are the conversion layer. They are selected based on funnel stage, caps, and cooldowns. Paid users never see promos.
 
 ## Hard rules
 
-- Promos only appear on `TRIAL` posts.
-- Promos never appear on `PUBLIC` posts.
+- Promos can appear on:
+  - `TRIAL` post surfaces (`INLINE`, `BOTTOM_CARD`, `MODAL_ON_COMPLETE`)
+  - course detail top slot (`COURSE_TOP`)
+  - practice problem top slot (`PRACTICE_TOP`)
+- Post promos do not appear on `PUBLIC` posts.
 - Promos never appear for `PAID_ACTIVE` users.
 - Paywalls are separate from promos (paywall is shown only when content is locked).
 
 ## How a promo is chosen (summary)
 
-1. The frontend requests a decision with `/api/promos/decide?slot=...&post_id=...`.
+1. The frontend requests a decision with `/api/promos/decide?slot=...&entity_type=...&entity_id=...`.
+   - Legacy post query (`post_id`) is still accepted for backward compatibility.
 2. The backend filters promos by:
    - status = ACTIVE
    - slot matches
@@ -43,6 +47,8 @@ Promos are the conversion layer. They are shown **only on TRIAL content** and ar
     - `BOTTOM_CARD` (end of article)
     - `MODAL_ON_COMPLETE` (modal after completion)
     - `PAYWALL_CARD` (locked content UI)
+    - `COURSE_TOP` (course detail, above lesson content)
+    - `PRACTICE_TOP` (practice problem detail, above title)
 
 - **Status**:
   - `ACTIVE` → eligible for delivery
@@ -102,7 +108,13 @@ Promos are the conversion layer. They are shown **only on TRIAL content** and ar
 3. UI requests `MODAL_ON_COMPLETE` promo.
 4. Modal appears with yearly CTA.
 
-### Flow 3: Paid expired renewal
+### Flow 3: Course/practice conversion touchpoint
+1. User opens a course page or a practice problem.
+2. UI requests `COURSE_TOP` or `PRACTICE_TOP`.
+3. If user stage is eligible and caps/cooldowns allow, promo renders above lesson/title.
+4. CTA leads to pricing/checkout.
+
+### Flow 4: Paid expired renewal
 1. User’s entitlement expires → stage `PAID_EXPIRED`.
 2. On TRIAL post, promo decision returns renewal CTA.
 3. CTA leads to account renewal or pricing.

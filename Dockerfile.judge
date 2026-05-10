@@ -1,0 +1,29 @@
+FROM golang:1.24-bookworm AS build
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/judge-worker ./cmd/judgeworker
+
+FROM golang:1.25-bookworm
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      gcc \
+      g++ \
+      openjdk-21-jdk-headless && \
+    rm -rf /var/lib/apt/lists/* && \
+    useradd -u 10001 -m -s /usr/sbin/nologin judge
+
+WORKDIR /workspace
+
+COPY --from=build /out/judge-worker /app/judge-worker
+
+RUN mkdir -p /tmp/go-build-cache /workspace && \
+    chown -R judge:judge /app /workspace /tmp/go-build-cache
+
+USER 10001

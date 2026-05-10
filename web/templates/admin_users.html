@@ -17,6 +17,9 @@
       <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
         <div class="flex flex-wrap items-center gap-3">
           <input id="users-query" placeholder="Search by name or email" class="flex-1 rounded-full bg-white border border-slate-200 px-4 py-2 text-slate-700" />
+          <select id="users-stage-filter" class="rounded-full bg-white border border-slate-200 px-4 py-2 text-slate-700">
+            <option value="">All stages</option>
+          </select>
           <button id="users-refresh" class="px-4 py-2 rounded-full border border-slate-200 text-slate-700">Refresh</button>
         </div>
         <div class="mt-6 overflow-x-auto">
@@ -25,6 +28,7 @@
               <tr>
                 <th class="py-3">Name</th>
                 <th class="py-3">Email</th>
+                <th class="py-3">Stage</th>
                 <th class="py-3">Role</th>
                 <th class="py-3"></th>
               </tr>
@@ -32,11 +36,16 @@
             <tbody id="users-table" class="divide-y divide-slate-200"></tbody>
           </table>
         </div>
+        <div class="mt-5 flex items-center justify-between gap-3 text-sm text-slate-500">
+          <button id="users-prev-page" class="rounded-full border border-slate-200 px-3 py-1.5 text-slate-600">Previous</button>
+          <p id="users-page-meta">Page 1</p>
+          <button id="users-next-page" class="rounded-full border border-slate-200 px-3 py-1.5 text-slate-600">Next</button>
+        </div>
       </div>
 
       <div class="rounded-3xl border border-slate-200 bg-white/80 p-6">
         <p class="text-xs uppercase tracking-wide text-slate-500">User details</p>
-        <div id="user-detail" class="mt-4 text-slate-600">Select a user to view details.</div>
+        <div id="user-detail" class="mt-4 text-slate-600">Select a user to view details and activity.</div>
       </div>
     </section>
   </main>

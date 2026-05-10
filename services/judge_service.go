@@ -624,7 +624,7 @@ func (s *JudgeService) resolveRunner() Runner {
 		return s.Runner
 	}
 
-	return &LocalRunner{}
+	return &DockerRunner{}
 }
 
 func (s *JudgeService) logError(message string, err error) {

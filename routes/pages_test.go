@@ -28,6 +28,7 @@ func TestLoadTemplatesIncludesAdminPages(t *testing.T) {
 		"courses",
 		"course",
 		"practice",
+		"practice_problem",
 		"account",
 		"admin_dashboard",
 		"admin_posts",

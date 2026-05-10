@@ -1,0 +1,406 @@
+{{ define "content" }}
+<div class="min-h-screen" data-page="practice-problem">
+  {{ template "nav" . }}
+
+  <main class="px-6 lg:px-16 pb-16">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+        <a href="/practice" class="hover:text-ink">Problems</a>
+        <span>/</span>
+        <span id="problem-breadcrumb" class="text-slate-700">Loading...</span>
+      </div>
+      <button
+        id="problem-theme-toggle"
+        type="button"
+        class="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+        aria-pressed="false"
+      >
+        Dark theme
+      </button>
+    </div>
+
+    <div id="problem-error" class="hidden mt-4 rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-700"></div>
+
+    <section class="problem-workspace mt-3 grid gap-0 border border-slate-200 bg-white xl:grid-cols-[minmax(0,40%)_minmax(0,60%)]">
+      <div class="border-b border-slate-200 bg-white xl:border-b-0 xl:border-r" id="problem-left-column">
+        <div class="flex h-10 flex-wrap items-center gap-6 border-b border-slate-200 px-6">
+          <button class="problem-tab text-sm font-semibold text-ink" data-problem-tab="description">Description</button>
+          <button class="problem-tab text-sm font-semibold text-slate-500" data-problem-tab="editorial">Editorial</button>
+          <button class="problem-tab text-sm font-semibold text-slate-500" data-problem-tab="submissions">Submissions</button>
+        </div>
+
+        <div class="space-y-8 px-6 py-6" id="problem-tab-description">
+          <div>
+            <div id="problem-promo-slot" class="mb-4 hidden"></div>
+            <div class="flex items-center gap-3 text-xs uppercase tracking-wide text-slate-500">
+              <span id="problem-difficulty" class="rounded-full bg-emerald-100 px-2 py-1 text-emerald-700">—</span>
+              <span id="problem-tags"></span>
+            </div>
+            <h1 class="mt-4 font-display text-3xl text-ink" id="problem-title">Loading...</h1>
+          </div>
+
+          <div>
+            <h2 class="text-lg font-semibold text-ink">Problem</h2>
+            <div id="problem-statement" class="mt-3 space-y-3 text-slate-600"></div>
+          </div>
+
+          <div>
+            <h2 class="text-lg font-semibold text-ink">Examples</h2>
+            <div id="problem-examples" class="mt-3 space-y-4"></div>
+          </div>
+
+          <div>
+            <h2 class="text-lg font-semibold text-ink">Constraints</h2>
+            <div id="problem-constraints" class="mt-3 space-y-2 text-slate-600"></div>
+          </div>
+
+          <div>
+            <h2 class="text-lg font-semibold text-ink">Hints</h2>
+            <div id="problem-hints" class="mt-3 space-y-3"></div>
+          </div>
+        </div>
+
+        <div class="hidden space-y-6 px-6 py-6" id="problem-tab-editorial">
+          <div>
+            <h2 class="text-lg font-semibold text-ink">Editorial</h2>
+            <div id="problem-editorial-body" class="mt-3 space-y-3 text-slate-600"></div>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-ink">Official solutions</h2>
+            <div id="problem-editorial-solutions" class="mt-3 space-y-4"></div>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-ink">Hints</h2>
+            <div id="problem-editorial-hints" class="mt-3 space-y-3"></div>
+          </div>
+        </div>
+
+        <div class="hidden px-6 py-6" id="problem-tab-submissions">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-semibold text-ink">Submission history</h2>
+              <p class="text-sm text-slate-500">Review your recent runs and submits for this problem.</p>
+              <p class="text-xs text-slate-400 mt-1">Click a row to load its code and result.</p>
+            </div>
+            <button id="submissions-refresh" class="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600">Refresh</button>
+          </div>
+
+          <div id="submissions-empty" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-600">
+            Sign in to see your submissions.
+          </div>
+
+          <div class="mt-6 overflow-x-auto hidden" id="submissions-table-wrapper">
+            <table class="w-full text-left text-sm">
+              <thead class="text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th class="py-3">Time</th>
+                  <th class="py-3">Mode</th>
+                  <th class="py-3">Language</th>
+                  <th class="py-3">Verdict</th>
+                  <th class="py-3">Passed</th>
+                </tr>
+              </thead>
+              <tbody id="submissions-table" class="divide-y divide-slate-200"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white" id="problem-right-column">
+        <div class="flex h-10 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4">
+          <div class="flex items-center gap-2">
+            <select id="problem-language" class="rounded-md border border-slate-200 bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
+              <option value="go">Go</option>
+              <option value="c">C</option>
+              <option value="cpp">C++</option>
+              <option value="java">Java</option>
+            </select>
+            <button id="problem-reset-template" class="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500">Reset template</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="problem-run" class="rounded-lg bg-slate-100 px-4 py-1.5 text-sm font-semibold text-slate-700">Run</button>
+            <button id="problem-submit" class="rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-white">Submit</button>
+          </div>
+        </div>
+
+        <div class="editor-expanded border-b border-slate-200 bg-white p-4" id="problem-editor-shell">
+          <textarea id="problem-code" class="w-full bg-transparent text-slate-700 p-4 font-mono text-sm focus:outline-none"></textarea>
+        </div>
+
+        <div class="hidden bg-white" id="problem-console" hidden>
+          <div class="flex h-10 items-center justify-between border-b border-slate-200 bg-slate-50 px-4">
+            <div class="flex items-center gap-3">
+              <div class="text-sm font-semibold text-slate-600">Console output</div>
+              <button id="problem-ai-action" class="ai-rotate-button ai-rotate-button-primary" data-ai-rotating-label>
+                <span class="ai-rotate-button-icon" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 3L14.2 8.8L20 11L14.2 13.2L12 19L9.8 13.2L4 11L9.8 8.8L12 3Z" fill="currentColor"></path>
+                  </svg>
+                </span>
+                <span data-ai-action-label>Get Feedback</span>
+              </button>
+            </div>
+            <div id="problem-verdict" class="text-xs uppercase tracking-wide text-slate-500">Waiting for run</div>
+          </div>
+          <div class="grid gap-3 p-4 md:grid-cols-3">
+            <div class="rounded-2xl border border-slate-200 p-3">
+              <div class="text-xs uppercase tracking-wide text-slate-400">Verdict</div>
+              <div id="problem-verdict-label" class="mt-2 text-lg font-semibold text-slate-700">—</div>
+              <div id="problem-verdict-meta" class="mt-2 text-xs text-slate-500"></div>
+            </div>
+            <div class="rounded-2xl border border-slate-200 p-3">
+              <div class="text-xs uppercase tracking-wide text-slate-400">Runtime</div>
+              <div id="problem-runtime" class="mt-2 text-lg font-semibold text-slate-700">—</div>
+              <div class="mt-2 text-xs text-slate-500">Total across tests</div>
+            </div>
+            <div class="rounded-2xl border border-slate-200 p-3">
+              <div class="text-xs uppercase tracking-wide text-slate-400">Memory</div>
+              <div id="problem-memory" class="mt-2 text-lg font-semibold text-slate-700">—</div>
+              <div class="mt-2 text-xs text-slate-500">Peak usage</div>
+            </div>
+          </div>
+
+          <div class="px-4 pb-1" id="problem-result-details"></div>
+          <div id="problem-ai-result" class="mx-4 mb-4 hidden"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+  <style>
+    @import url("https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.css");
+    @import url("https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.css");
+    @import url("https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/github-dark.min.css");
+    [data-page="practice-problem"] > header {
+      padding-top: 1rem;
+      padding-bottom: 1rem;
+    }
+    [data-page="practice-problem"] main {
+      padding-top: 0.25rem;
+    }
+    #problem-theme-toggle {
+      transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+    }
+    @media (min-width: 1280px) {
+      .problem-workspace {
+        align-items: start;
+      }
+      #problem-right-column {
+        position: sticky;
+        top: 1rem;
+        align-self: start;
+      }
+    }
+    #problem-editor-shell {
+      background: #ffffff;
+    }
+    #problem-editor-shell textarea {
+      height: clamp(360px, 48vh, 560px);
+    }
+    .CodeMirror {
+      height: clamp(360px, 48vh, 560px);
+      background: #ffffff;
+      color: #1e293b;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.75;
+    }
+    #problem-editor-shell.editor-expanded .CodeMirror {
+      height: clamp(520px, 66vh, 760px);
+    }
+    #problem-editor-shell.editor-expanded textarea {
+      height: clamp(520px, 66vh, 760px);
+    }
+    .CodeMirror-scroll,
+    .CodeMirror-sizer {
+      min-height: inherit !important;
+    }
+    .CodeMirror-scroll {
+      padding: 8px 0;
+    }
+    .CodeMirror-gutters {
+      background: #ffffff;
+      border-right: 0;
+    }
+    .CodeMirror-linenumber {
+      color: #cbd5e1;
+    }
+    .CodeMirror-cursor {
+      border-left: 1px solid #334155;
+    }
+    .CodeMirror-selected {
+      background: rgba(13, 89, 242, 0.14);
+    }
+    .ai-rotate-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.375rem;
+      min-width: 10.75rem;
+      border-radius: 9999px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      padding: 0.35rem 0.7rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #0f172a;
+      transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+    }
+    .ai-rotate-button:hover {
+      border-color: #0d59f2;
+      color: #0d59f2;
+    }
+    .ai-rotate-button-primary {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #ffffff;
+    }
+    .ai-rotate-button-primary .ai-rotate-button-icon {
+      color: #ffffff;
+    }
+    .ai-rotate-button-primary:hover {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #ffffff;
+      filter: brightness(0.94);
+    }
+    .ai-rotate-button-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #0d59f2;
+    }
+    .ai-rotate-button-detail {
+      border-color: #0d59f2;
+      background: #0d59f2;
+      color: #ffffff;
+    }
+    .ai-rotate-button-detail .ai-rotate-button-icon {
+      color: #ffffff;
+    }
+    .ai-rotate-button-detail:hover {
+      border-color: #0a47c7;
+      background: #0a47c7;
+      color: #ffffff;
+    }
+    #submissions-table .submission-history-row:hover {
+      background: #f8fafc;
+    }
+    #submissions-table .submission-history-row-active {
+      background: #eff6ff;
+    }
+    #submissions-table .submission-history-row-active td {
+      color: #0f172a;
+    }
+    #problem-left-column .hljs {
+      background: #0f172a;
+      border-radius: 1rem;
+      padding: 1rem;
+    }
+    #problem-left-column pre code.hljs {
+      border: 0;
+      line-height: 1.55;
+    }
+
+    [data-page="practice-problem"][data-practice-theme="dark"] {
+      background: #020617;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] #problem-theme-toggle {
+      background: #0f172a;
+      border-color: #334155;
+      color: #e2e8f0;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .problem-workspace,
+    [data-page="practice-problem"][data-practice-theme="dark"] #problem-left-column,
+    [data-page="practice-problem"][data-practice-theme="dark"] #problem-right-column {
+      background: #0f172a !important;
+      border-color: #334155 !important;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] :is(.border-slate-200, .divide-slate-200) {
+      border-color: #334155 !important;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] :is(.bg-white, .bg-slate-50) {
+      background: #111827 !important;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .bg-slate-100 {
+      background: #1f2937 !important;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] :is(.text-ink, .text-slate-700) {
+      color: #e2e8f0 !important;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .text-slate-600 {
+      color: #cbd5e1 !important;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] :is(.text-slate-500, .text-slate-400) {
+      color: #94a3b8 !important;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] #problem-editor-shell {
+      background: #0f172a !important;
+      border-color: #334155 !important;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] #problem-editor-shell textarea {
+      color: #e2e8f0 !important;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .CodeMirror {
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .CodeMirror-gutters {
+      background: #0f172a;
+      border-right: 0;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .CodeMirror-linenumber {
+      color: #64748b;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .CodeMirror-cursor {
+      border-left: 1px solid #f8fafc;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .CodeMirror-selected {
+      background: rgba(59, 130, 246, 0.24);
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .ai-rotate-button {
+      border-color: #475569;
+      background: #111827;
+      color: #e2e8f0;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .ai-rotate-button:hover {
+      border-color: #60a5fa;
+      color: #60a5fa;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .ai-rotate-button-primary {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #ffffff;
+      filter: none;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .ai-rotate-button-primary:hover {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #ffffff;
+      filter: brightness(0.94);
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .ai-rotate-button-icon {
+      color: #60a5fa;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .ai-rotate-button-detail {
+      border-color: #2563eb;
+      background: #2563eb;
+      color: #ffffff;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] .ai-rotate-button-detail .ai-rotate-button-icon {
+      color: #ffffff;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] #submissions-table .submission-history-row:hover {
+      background: #1f2937;
+    }
+    [data-page="practice-problem"][data-practice-theme="dark"] #submissions-table .submission-history-row-active {
+      background: #1e3a8a;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/common.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/clike/clike.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/go/go.js"></script>
+{{ end }}

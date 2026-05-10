@@ -14,6 +14,17 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	freeSubmissionLimit           = 20
+	freeSubmissionRateLimitWindow = time.Minute
+	freeSubmissionRateLimitPerMin = int64(5)
+	paidSubmissionRateLimitPerMin = int64(20)
+)
+
+var errFreeSubmissionLimitReached = errors.New("free submission limit reached")
+var errSubmissionAlreadyInFlight = errors.New("submission already in progress")
+var errSubmissionRateLimitReached = errors.New("submission rate limit reached")
+
 type SubmissionsHandler struct {
 	Store *stores.Store
 }
@@ -74,8 +85,21 @@ func (h *SubmissionsHandler) create(c *gin.Context) {
 		return
 	}
 
-	if err := h.ensureSubmissionAccess(user.ID, normalized.Mode); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	if err := h.ensureSubmissionAccess(user.ID); err != nil {
+		if errors.Is(err, errFreeSubmissionLimitReached) {
+			c.JSON(http.StatusPaymentRequired, gin.H{"error": "FREE_SUBMISSION_LIMIT_REACHED"})
+			return
+		}
+		if errors.Is(err, errSubmissionAlreadyInFlight) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "SUBMISSION_ALREADY_IN_PROGRESS"})
+			return
+		}
+		if errors.Is(err, errSubmissionRateLimitReached) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "SUBMISSION_RATE_LIMIT_REACHED"})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to verify submission limit"})
 		return
 	}
 
@@ -122,7 +146,7 @@ func (h *SubmissionsHandler) get(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"submission": submissionSummary(submission)})
+	c.JSON(http.StatusOK, gin.H{"submission": submissionDetail(submission)})
 }
 
 func (h *SubmissionsHandler) result(c *gin.Context) {
@@ -300,20 +324,86 @@ func (h *SubmissionsHandler) selectDatasetForMode(problemID uint, mode string) (
 	}, nil
 }
 
-func (h *SubmissionsHandler) ensureSubmissionAccess(userID uint, mode string) error {
-	modeValue := strings.ToUpper(strings.TrimSpace(mode))
-	if modeValue != stores.SubmissionModeSubmit {
+func (h *SubmissionsHandler) ensureSubmissionAccess(userID uint) error {
+	if userID == 0 {
+		return gorm.ErrRecordNotFound
+	}
+
+	if err := h.ensureNoSubmissionInFlight(userID); err != nil {
+		return err
+	}
+
+	perMinuteLimit, err := h.resolvePerMinuteSubmissionLimit(userID)
+	if err != nil {
+		return err
+	}
+
+	if err := h.ensurePerMinuteSubmissionLimit(userID, perMinuteLimit); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h *SubmissionsHandler) ensureNoSubmissionInFlight(userID uint) error {
+	countOutput, countErr := h.Store.CountUserActiveSubmissions(stores.UserActiveSubmissionCountInput{
+		UserID: userID,
+	})
+	if countErr != nil {
+		return countErr
+	}
+
+	if countOutput.Count > 0 {
+		return errSubmissionAlreadyInFlight
+	}
+
+	return nil
+}
+
+func (h *SubmissionsHandler) resolvePerMinuteSubmissionLimit(userID uint) (int64, error) {
+	now := time.Now().UTC()
+
+	_, entitlementErr := h.Store.GetActiveEntitlement(stores.EntitlementLookupInput{
+		UserID: userID,
+		Now:    now,
+	})
+	if entitlementErr == nil {
+		return paidSubmissionRateLimitPerMin, nil
+	}
+	if !errors.Is(entitlementErr, gorm.ErrRecordNotFound) {
+		return 0, entitlementErr
+	}
+
+	countOutput, countErr := h.Store.CountUserSubmissions(stores.UserSubmissionCountInput{UserID: userID})
+	if countErr != nil {
+		return 0, countErr
+	}
+	if countOutput.Count >= freeSubmissionLimit {
+		return 0, errFreeSubmissionLimitReached
+	}
+
+	return freeSubmissionRateLimitPerMin, nil
+}
+
+func (h *SubmissionsHandler) ensurePerMinuteSubmissionLimit(userID uint, limit int64) error {
+	if limit <= 0 {
 		return nil
 	}
 
-	_, err := h.Store.GetActiveEntitlement(stores.EntitlementLookupInput{UserID: userID, Now: time.Now().UTC()})
-	if err == nil {
-		return nil
+	windowStart := time.Now().UTC().Add(-freeSubmissionRateLimitWindow)
+	countOutput, countErr := h.Store.CountUserSubmissionsSince(stores.UserRecentSubmissionCountInput{
+		UserID: userID,
+		Since:  windowStart,
+	})
+	if countErr != nil {
+		return countErr
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return errors.New("active plan required for submit")
+
+	if countOutput.Count >= limit {
+		return errSubmissionRateLimitReached
 	}
-	return errors.New("unable to verify plan")
+
+	return nil
 }
 
 func (h *SubmissionsHandler) isSubmissionOwner(c *gin.Context, submission *stores.SubmissionModel) bool {
@@ -350,6 +440,16 @@ func submissionSummary(submission *stores.SubmissionModel) gin.H {
 		"started_at":  submission.StartedAt,
 		"finished_at": submission.FinishedAt,
 	}
+}
+
+func submissionDetail(submission *stores.SubmissionModel) gin.H {
+	summary := submissionSummary(submission)
+	if submission == nil {
+		return summary
+	}
+
+	summary["code_text"] = submission.CodeText
+	return summary
 }
 
 func normalizeSubmissionLanguage(language string) string {
