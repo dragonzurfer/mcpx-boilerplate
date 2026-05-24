@@ -4953,7 +4953,8 @@ const renderPricing = async () => {
 
   try {
     const data = await fetchJSON(API.plans);
-    state.plans = data.plans || [];
+    state.plans = orderPricingPlans(data.plans || []);
+    renderPricingHighlight(state.plans);
 
     if (state.plans.length === 0) {
       container.innerHTML = "<p class=\"col-span-full rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-600\">No plans are available right now.</p>";
@@ -4962,13 +4963,36 @@ const renderPricing = async () => {
     }
 
     container.querySelectorAll("[data-plan]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
         const code = btn.dataset.plan;
+        if (!code || btn.dataset.checkoutBusy === "true") {
+          return;
+        }
         if (!state.token) {
           showLoginGate();
           return;
         }
-        openCheckout(code);
+
+        btn.dataset.checkoutBusy = "true";
+        setPlanCheckoutButtonState(btn, true);
+
+        try {
+          await openCheckout(code, {
+            onCheckoutReady: () => {
+              setPlanCheckoutButtonState(btn, false);
+              btn.dataset.checkoutBusy = "false";
+            },
+            onCheckoutClosed: () => {
+              setPlanCheckoutButtonState(btn, false);
+              btn.dataset.checkoutBusy = "false";
+            }
+          });
+        } catch (err) {
+          console.error(err);
+          showToast(err.message || "Unable to start checkout right now.");
+          setPlanCheckoutButtonState(btn, false);
+          btn.dataset.checkoutBusy = "false";
+        }
       });
     });
     setVisibility(container, true);
@@ -4979,6 +5003,69 @@ const renderPricing = async () => {
   } finally {
     setVisibility(loader, false);
   }
+};
+
+const planIntervalPriority = (interval) => {
+  const normalizedInterval = String(interval || "").toLowerCase();
+  if (normalizedInterval === "yearly") return 0;
+  if (normalizedInterval === "monthly") return 1;
+  return 2;
+};
+
+const orderPricingPlans = (plans) => {
+  if (!Array.isArray(plans)) return [];
+
+  return [...plans].sort((leftPlan, rightPlan) => {
+    const priorityGap = planIntervalPriority(leftPlan.interval) - planIntervalPriority(rightPlan.interval);
+    if (priorityGap !== 0) {
+      return priorityGap;
+    }
+
+    const leftPrice = Number(leftPlan.priceInr || 0);
+    const rightPrice = Number(rightPlan.priceInr || 0);
+    return leftPrice - rightPrice;
+  });
+};
+
+const renderPricingHighlight = (plans) => {
+  const highlightValueEl = document.getElementById("pricing-highlight-value");
+  const highlightCaptionEl = document.getElementById("pricing-highlight-caption");
+  if (!highlightValueEl || !highlightCaptionEl) {
+    return;
+  }
+
+  const monthlyPlan = plans.find((plan) => String(plan.interval || "").toLowerCase() === "monthly");
+  const yearlyPlan = plans.find((plan) => String(plan.interval || "").toLowerCase() === "yearly");
+  if (!monthlyPlan || !yearlyPlan) {
+    return;
+  }
+
+  const monthlyYearPrice = Number(monthlyPlan.priceInr || 0) * 12;
+  const yearlyPrice = Number(yearlyPlan.priceInr || 0);
+  const savingsAmount = monthlyYearPrice - yearlyPrice;
+  if (savingsAmount <= 0) {
+    return;
+  }
+
+  const savingsPercent = monthlyYearPrice > 0 ? Math.round((savingsAmount / monthlyYearPrice) * 100) : 0;
+  highlightValueEl.textContent = `Save ${formatINR(savingsAmount)} with yearly billing.`;
+  highlightCaptionEl.textContent = `${savingsPercent}% lower than paying monthly for 12 months, with uninterrupted access for long prep cycles.`;
+};
+
+const setPlanCheckoutButtonState = (button, isLoading) => {
+  if (!button) return;
+
+  const originalLabel = String(button.dataset.planLabel || "").trim() || "Subscribe";
+  if (isLoading) {
+    button.disabled = true;
+    button.classList.add("is-loading");
+    button.innerHTML = "<span class=\"pricing-button-spinner\" aria-hidden=\"true\"></span><span>Opening checkout...</span>";
+    return;
+  }
+
+  button.disabled = false;
+  button.classList.remove("is-loading");
+  button.textContent = originalLabel;
 };
 
 const toolCatalog = {
@@ -5365,12 +5452,12 @@ const findPlanByInterval = (interval) => {
 };
 
 const renderPlanCard = (plan) => {
-  const highlight = plan.mostPopular ? "border-skyline/80" : "border-slate-200/60";
   const interval = String(plan.interval || "").toLowerCase();
   const isYearly = interval === "yearly";
   const isMonthly = interval === "monthly";
   const monthlyPlan = findPlanByInterval("monthly");
   const yearlyPlan = findPlanByInterval("yearly");
+  const isRecommended = isYearly || Boolean(plan.mostPopular);
 
   let valueLine = "";
   if (isYearly && monthlyPlan) {
@@ -5394,16 +5481,18 @@ const renderPlanCard = (plan) => {
     const yearlyPrice = Number(yearlyPlan.priceInr || 0);
     const savingsAmount = monthlyPrice*12 - yearlyPrice;
     if (savingsAmount > 0) {
-      valueLine = `<p class="mt-2 text-sm text-slate-600">Best for 1-month prep. For multi-month prep, yearly saves ${formatINR(savingsAmount)} overall.</p>`;
+      valueLine = `<p class="mt-2 text-sm text-slate-600">Short-term plan. For multi-month prep, yearly saves ${formatINR(savingsAmount)} overall.</p>`;
     }
   }
 
   const audienceLine = isYearly
     ? "Recommended for multi-month preparation and consistent momentum."
-    : "Great for short, focused one-month preparation.";
-  const recommendedBadge = plan.mostPopular
-    ? `<span class="rounded-full bg-skyline/10 px-2 py-1 text-xs font-semibold text-skyline">Best value</span>`
+    : "Useful for a short sprint when you only need one month.";
+  const recommendedBadge = isRecommended
+    ? "<span class=\"pricing-recommended-badge\">Recommended</span>"
     : "";
+  const buttonLabel = isYearly ? "Choose yearly plan" : "Choose monthly plan";
+  const intervalLabel = isYearly ? "per year" : "per month";
 
   const benefits = [
     "All paid posts unlocked",
@@ -5411,17 +5500,17 @@ const renderPlanCard = (plan) => {
     "All tools included",
     "OneSub Desktop included",
     "Run and practice DSA challenges",
-    "Curated, structured learning methods",
+    "Curated, structured learning methods"
   ];
 
   return `
-    <div class="rounded-3xl border ${highlight} bg-white/90 p-6">
+    <article class="pricing-plan-card ${isRecommended ? "is-recommended" : ""}">
       <div class="flex items-center justify-between gap-3">
         <p class="text-xs uppercase tracking-wide text-slate-500">${plan.name}</p>
         ${recommendedBadge}
       </div>
       <h3 class="mt-4 font-display text-3xl text-ink">${formatINR(plan.priceInr)}</h3>
-      <p class="text-slate-600">${plan.interval === "yearly" ? "per year" : "per month"}</p>
+      <p class="text-slate-600">${intervalLabel}</p>
       ${valueLine}
       <p class="mt-3 text-sm text-slate-600">${audienceLine}</p>
       <ul class="mt-4 space-y-2">
@@ -5432,8 +5521,13 @@ const renderPlanCard = (plan) => {
           )
           .join("")}
       </ul>
-      <button data-plan="${plan.code}" class="mt-6 w-full rounded-full bg-skyline text-white py-3 font-semibold">Subscribe</button>
-    </div>
+      <button
+        type="button"
+        data-plan="${plan.code}"
+        data-plan-label="${buttonLabel}"
+        class="pricing-subscribe-button mt-6 w-full rounded-full py-3 font-semibold"
+      >${buttonLabel}</button>
+    </article>
   `;
 };
 
@@ -8201,7 +8295,27 @@ const shouldResumeToolState = () => {
   return params.get("resume") === "1" || params.get("resume") === "true";
 };
 
-const openCheckout = async (planCode) => {
+const openCheckout = async (planCode, callbacks = {}) => {
+  const onCheckoutReady = typeof callbacks.onCheckoutReady === "function"
+    ? callbacks.onCheckoutReady
+    : () => {};
+  const onCheckoutClosed = typeof callbacks.onCheckoutClosed === "function"
+    ? callbacks.onCheckoutClosed
+    : () => {};
+
+  let checkoutReady = false;
+  let checkoutClosed = false;
+  const markCheckoutReady = () => {
+    if (checkoutReady) return;
+    checkoutReady = true;
+    onCheckoutReady();
+  };
+  const markCheckoutClosed = () => {
+    if (checkoutClosed) return;
+    checkoutClosed = true;
+    onCheckoutClosed();
+  };
+
   await loadRazorpay();
   const data = await fetchJSON(API.createOrder, {
     method: "POST",
@@ -8214,35 +8328,74 @@ const openCheckout = async (planCode) => {
     currency: data.currency,
     name: state.config?.siteName || "Explore",
     order_id: data.order_id,
+    modal: {
+      ondismiss: () => {
+        markCheckoutClosed();
+      }
+    },
     handler: async (response) => {
-      await fetchJSON(API.confirm, {
-        method: "POST",
-        body: JSON.stringify({
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature
-        })
-      });
-      await loadUser();
-      updateNavState();
-      showToast("Payment successful. Welcome back!");
-      setTimeout(() => window.location.reload(), 1200);
+      try {
+        await fetchJSON(API.confirm, {
+          method: "POST",
+          body: JSON.stringify({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature
+          })
+        });
+        await loadUser();
+        updateNavState();
+        showToast("Payment successful. Welcome back!");
+        setTimeout(() => window.location.reload(), 1200);
+      } finally {
+        markCheckoutClosed();
+      }
     }
   };
 
   const rzp = new window.Razorpay(options);
+  if (typeof rzp.on === "function") {
+    rzp.on("payment.failed", () => {
+      markCheckoutClosed();
+    });
+  }
+  markCheckoutReady();
   rzp.open();
 };
 
 const loadRazorpay = () => {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (window.Razorpay) {
       resolve();
       return;
     }
+
+    const existingScript = document.querySelector("script[data-razorpay-checkout='true']");
+    if (existingScript) {
+      if (existingScript.dataset.loaded === "true" && window.Razorpay) {
+        resolve();
+        return;
+      }
+      if (existingScript.dataset.failed === "true") {
+        reject(new Error("Unable to load checkout script."));
+        return;
+      }
+      existingScript.addEventListener("load", () => resolve(), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Unable to load checkout script.")), { once: true });
+      return;
+    }
+
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = resolve;
+    script.dataset.razorpayCheckout = "true";
+    script.onload = () => {
+      script.dataset.loaded = "true";
+      resolve();
+    };
+    script.onerror = () => {
+      script.dataset.failed = "true";
+      reject(new Error("Unable to load checkout script."));
+    };
     document.body.appendChild(script);
   });
 };
