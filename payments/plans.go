@@ -13,7 +13,7 @@ type Plan struct {
 	Name            string           `json:"name"`
 	Description     string           `json:"description,omitempty"`
 	Type            string           `json:"type"`     // free, one_time, subscription
-	Interval        string           `json:"interval"` // monthly, yearly
+	Interval        string           `json:"interval"` // monthly, quarterly, yearly
 	PriceINR        int              `json:"priceInr"`
 	MostPopular     bool             `json:"mostPopular"`
 	Quotas          map[string]int64 `json:"quotas"`
@@ -148,6 +148,16 @@ func defaultConfig() Config {
 				MostPopular:     false,
 				Quotas:          map[string]int64{},
 				EntitlementDays: 30,
+			},
+			{
+				Code:            "quarterly",
+				Name:            "Quarterly",
+				Type:            "one_time",
+				Interval:        "quarterly",
+				PriceINR:        1122,
+				MostPopular:     false,
+				Quotas:          map[string]int64{},
+				EntitlementDays: 90,
 			},
 			{
 				Code:            "yearly",

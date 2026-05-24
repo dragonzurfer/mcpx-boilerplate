@@ -6,4 +6,5 @@ Configuration files consumed by the backend.
 
 ## Files
 
-- `plans.json`: monthly/yearly manual plans with `entitlementDays` for renewal windows.
+- `plans.json`: manual renewal plans with `entitlementDays` windows.
+  The default set is monthly + quarterly (3 months) + yearly.

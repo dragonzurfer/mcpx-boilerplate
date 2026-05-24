@@ -5008,11 +5008,14 @@ const renderPricing = async () => {
   }
 };
 
+const normalizePlanInterval = (interval) => String(interval || "").trim().toLowerCase();
+
 const planIntervalPriority = (interval) => {
-  const normalizedInterval = String(interval || "").toLowerCase();
+  const normalizedInterval = normalizePlanInterval(interval);
   if (normalizedInterval === "yearly") return 0;
-  if (normalizedInterval === "monthly") return 1;
-  return 2;
+  if (normalizedInterval === "quarterly") return 1;
+  if (normalizedInterval === "monthly") return 2;
+  return 3;
 };
 
 const orderPricingPlans = (plans) => {
@@ -5030,6 +5033,34 @@ const orderPricingPlans = (plans) => {
   });
 };
 
+const planDurationMonths = (plan) => {
+  const interval = normalizePlanInterval(plan?.interval);
+  if (interval === "yearly") return 12;
+  if (interval === "quarterly") return 3;
+  if (interval === "monthly") return 1;
+
+  const entitlementDays = Number(plan?.entitlementDays || plan?.entitlement_days || 0);
+  if (!Number.isFinite(entitlementDays) || entitlementDays <= 0) {
+    return 1;
+  }
+
+  return Math.max(1, Math.round(entitlementDays / 30));
+};
+
+const savingsAgainstMonthly = (plan, monthlyPlan) => {
+  if (!plan || !monthlyPlan) return 0;
+
+  const durationMonths = planDurationMonths(plan);
+  const baseline = Number(monthlyPlan.priceInr || 0) * durationMonths;
+  const planPrice = Number(plan.priceInr || 0);
+  const savings = baseline - planPrice;
+  if (!Number.isFinite(savings) || savings <= 0) {
+    return 0;
+  }
+
+  return savings;
+};
+
 const renderPricingHighlight = (plans) => {
   const highlightValueEl = document.getElementById("pricing-highlight-value");
   const highlightCaptionEl = document.getElementById("pricing-highlight-caption");
@@ -5037,22 +5068,34 @@ const renderPricingHighlight = (plans) => {
     return;
   }
 
-  const monthlyPlan = plans.find((plan) => String(plan.interval || "").toLowerCase() === "monthly");
-  const yearlyPlan = plans.find((plan) => String(plan.interval || "").toLowerCase() === "yearly");
+  const monthlyPlan = plans.find((plan) => normalizePlanInterval(plan.interval) === "monthly");
+  const quarterlyPlan = plans.find((plan) => normalizePlanInterval(plan.interval) === "quarterly");
+  const yearlyPlan = plans.find((plan) => normalizePlanInterval(plan.interval) === "yearly");
   if (!monthlyPlan || !yearlyPlan) {
     return;
   }
 
-  const monthlyYearPrice = Number(monthlyPlan.priceInr || 0) * 12;
-  const yearlyPrice = Number(yearlyPlan.priceInr || 0);
-  const savingsAmount = monthlyYearPrice - yearlyPrice;
-  if (savingsAmount <= 0) {
+  const yearlySavingsAmount = savingsAgainstMonthly(yearlyPlan, monthlyPlan);
+  if (yearlySavingsAmount <= 0) {
     return;
   }
 
-  const savingsPercent = monthlyYearPrice > 0 ? Math.round((savingsAmount / monthlyYearPrice) * 100) : 0;
-  highlightValueEl.textContent = `Save ${formatINR(savingsAmount)} with yearly billing.`;
-  highlightCaptionEl.textContent = `${savingsPercent}% lower than paying monthly for 12 months, with uninterrupted access for long prep cycles.`;
+  const yearlyBaseline = Number(monthlyPlan.priceInr || 0) * planDurationMonths(yearlyPlan);
+  const yearlySavingsPercent = yearlyBaseline > 0
+    ? Math.round((yearlySavingsAmount / yearlyBaseline) * 100)
+    : 0;
+
+  let caption = `${yearlySavingsPercent}% lower than paying monthly for 12 months, with uninterrupted access for long prep cycles.`;
+  if (quarterlyPlan) {
+    const quarterlySavings = savingsAgainstMonthly(quarterlyPlan, monthlyPlan);
+    if (quarterlySavings > 0) {
+      const quarterlyMonthlyEquivalent = Math.round(Number(quarterlyPlan.priceInr || 0) / planDurationMonths(quarterlyPlan));
+      caption = `${caption} Quarterly gives a mid-commitment option at about ${formatINR(quarterlyMonthlyEquivalent)}/month.`;
+    }
+  }
+
+  highlightValueEl.textContent = `Yearly saves ${formatINR(yearlySavingsAmount)} over monthly billing.`;
+  highlightCaptionEl.textContent = caption;
 };
 
 const setPlanCheckoutButtonState = (button, isLoading) => {
@@ -5455,81 +5498,97 @@ const findPlanByInterval = (interval) => {
 };
 
 const renderPlanCard = (plan) => {
-  const interval = String(plan.interval || "").toLowerCase();
+  const interval = normalizePlanInterval(plan.interval);
   const isYearly = interval === "yearly";
+  const isQuarterly = interval === "quarterly";
   const isMonthly = interval === "monthly";
   const monthlyPlan = findPlanByInterval("monthly");
-  const yearlyPlan = findPlanByInterval("yearly");
+  const durationMonths = planDurationMonths(plan);
+  const planPrice = Number(plan.priceInr || 0);
+  const monthlyEquivalent = durationMonths > 0 ? Math.round(planPrice / durationMonths) : planPrice;
+  const savingsAmount = savingsAgainstMonthly(plan, monthlyPlan);
+  const baselineAmount = monthlyPlan ? Number(monthlyPlan.priceInr || 0) * durationMonths : 0;
+  const savingsPercent = baselineAmount > 0 ? Math.round((savingsAmount / baselineAmount) * 100) : 0;
   const isRecommended = isYearly || Boolean(plan.mostPopular);
 
-  let valueLine = "";
-  if (isYearly && monthlyPlan) {
-    const regularYearlyPrice = Number(monthlyPlan.priceInr || 0) * 12;
-    const yearlyPrice = Number(plan.priceInr || 0);
-    const savingsAmount = regularYearlyPrice - yearlyPrice;
-    const savingsPct = regularYearlyPrice > 0 ? Math.round((savingsAmount / regularYearlyPrice) * 100) : 0;
-    const effectiveMonthly = yearlyPrice > 0 ? Math.round(yearlyPrice / 12) : 0;
-    if (savingsAmount > 0) {
-      valueLine = `
-        <div class="mt-2 flex flex-wrap items-center gap-2">
-          <span class="text-sm text-slate-500 line-through">${formatINR(regularYearlyPrice)}</span>
-          <span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">Save ${formatINR(savingsAmount)} (${savingsPct}% off)</span>
-        </div>
-        <p class="mt-2 text-sm text-slate-600">Effective ${formatINR(effectiveMonthly)}/month vs ${formatINR(monthlyPlan.priceInr)}/month on monthly.</p>
-      `;
-    }
+  let intervalLabel = "per month";
+  if (isQuarterly) {
+    intervalLabel = "per 3 months";
   }
-  if (isMonthly && yearlyPlan) {
-    const monthlyPrice = Number(plan.priceInr || 0);
-    const yearlyPrice = Number(yearlyPlan.priceInr || 0);
-    const savingsAmount = monthlyPrice*12 - yearlyPrice;
-    if (savingsAmount > 0) {
-      valueLine = `<p class="mt-2 text-sm text-slate-600">Short-term plan. For multi-month prep, yearly saves ${formatINR(savingsAmount)} overall.</p>`;
-    }
+  if (isYearly) {
+    intervalLabel = "per year";
   }
 
-  const audienceLine = isYearly
-    ? "Recommended for multi-month preparation and consistent momentum."
-    : "Useful for a short sprint when you only need one month.";
-  const recommendedBadge = isRecommended
-    ? "<span class=\"pricing-recommended-badge\">Recommended</span>"
-    : "";
-  const buttonLabel = isYearly ? "Choose yearly plan" : "Choose monthly plan";
-  const intervalLabel = isYearly ? "per year" : "per month";
+  const valueChips = [];
+  valueChips.push(`<span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">${durationMonths} month validity</span>`);
+  if (monthlyEquivalent > 0) {
+    valueChips.push(`<span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">${formatINR(monthlyEquivalent)}/month effective</span>`);
+  }
+  if (savingsAmount > 0 && savingsPercent > 0) {
+    valueChips.push(`<span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">Save ${formatINR(savingsAmount)} (${savingsPercent}% off)</span>`);
+  }
 
-  const benefits = [
-    "All paid posts unlocked",
-    "All courses included",
-    "All tools included",
-    "OneSub Desktop included",
-    "Run and practice DSA challenges",
-    "Curated, structured learning methods"
-  ];
+  let headline = "Pay month-to-month with the lowest upfront commitment.";
+  let buttonLabel = "Choose monthly";
+  if (isQuarterly) {
+    headline = "Best for a focused 3-month prep sprint at a lower monthly equivalent.";
+    buttonLabel = "Choose 3-month plan";
+  }
+  if (isYearly) {
+    headline = "Best overall value for long interview preparation cycles.";
+    buttonLabel = "Choose yearly plan";
+  }
+
+  const badges = [];
+  if (isRecommended) {
+    badges.push("<span class=\"pricing-recommended-badge\">Best value</span>");
+  }
+  if (isYearly && savingsPercent > 0) {
+    badges.push(`<span class="pricing-recommended-badge">Save ${savingsPercent}%</span>`);
+  }
+  if (isQuarterly && savingsPercent > 0) {
+    badges.push(`<span class="pricing-recommended-badge">${savingsPercent}% off vs monthly</span>`);
+  }
+  if (isMonthly && !isRecommended) {
+    badges.push("<span class=\"pricing-recommended-badge\">Pay as you go</span>");
+  }
+
+  const cardClasses = [
+    "pricing-plan-card",
+    isRecommended ? "is-recommended" : "",
+    isQuarterly ? "is-intermediate" : "",
+    isMonthly ? "is-secondary" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return `
-    <article class="pricing-plan-card ${isRecommended ? "is-recommended" : ""}">
-      <div class="flex items-center justify-between gap-3">
+    <article class="${cardClasses}">
+      <div class="flex items-center justify-between gap-2">
         <p class="text-xs uppercase tracking-wide text-slate-500">${plan.name}</p>
-        ${recommendedBadge}
+        <div class="flex flex-wrap items-center justify-end gap-1">${badges.join("")}</div>
       </div>
-      <h3 class="mt-4 font-display text-3xl text-ink">${formatINR(plan.priceInr)}</h3>
-      <p class="text-slate-600">${intervalLabel}</p>
-      ${valueLine}
-      <p class="mt-3 text-sm text-slate-600">${audienceLine}</p>
-      <ul class="mt-4 space-y-2">
-        ${benefits
-          .map(
-            (benefit) =>
-              `<li class="flex items-start gap-2 text-sm text-slate-600"><span class="mt-0.5 text-emerald-600">✓</span><span>${benefit}</span></li>`,
-          )
-          .join("")}
-      </ul>
+
+      <h3 class="mt-3 font-display text-3xl text-ink">${formatINR(planPrice)}</h3>
+      <p class="text-sm text-slate-600">${intervalLabel}</p>
+
+      <div class="mt-3 flex flex-wrap gap-1.5">
+        ${valueChips.join("")}
+      </div>
+
       <button
         type="button"
         data-plan="${plan.code}"
         data-plan-label="${buttonLabel}"
-        class="pricing-subscribe-button mt-6 w-full rounded-full py-3 font-semibold"
+        class="pricing-subscribe-button w-full rounded-full font-semibold"
       >${buttonLabel}</button>
+
+      <p class="mt-3 text-sm text-slate-600">${headline}</p>
+      <ul class="mt-3 space-y-1.5">
+        <li class="flex items-start gap-2 text-sm text-slate-600"><span class="mt-0.5 text-emerald-600">✓</span><span>All paid posts, courses, and tools</span></li>
+        <li class="flex items-start gap-2 text-sm text-slate-600"><span class="mt-0.5 text-emerald-600">✓</span><span>OneSub Desktop + DSA practice access</span></li>
+        <li class="flex items-start gap-2 text-sm text-slate-600"><span class="mt-0.5 text-emerald-600">✓</span><span>Manual renewal, no auto-deduction</span></li>
+      </ul>
     </article>
   `;
 };

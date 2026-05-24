@@ -11,6 +11,14 @@
       "entitlementDays": 30
     },
     {
+      "code": "quarterly",
+      "name": "Quarterly",
+      "type": "one_time",
+      "interval": "quarterly",
+      "priceInr": 1122,
+      "entitlementDays": 90
+    },
+    {
       "code": "yearly",
       "name": "Yearly",
       "type": "one_time",
