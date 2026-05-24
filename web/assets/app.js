@@ -1739,10 +1739,12 @@ const buildCourseLessonToc = (bodyContainer) => {
 
   disconnectCourseTocObserver();
 
-  const headingEntries = Array.from(bodyContainer.querySelectorAll("h2, h3, h4"))
+  const headingEntries = Array.from(bodyContainer.querySelectorAll("h1, h2, h3, h4"))
     .map((heading) => {
+      const level = Number((heading.tagName || "H2").replace("H", ""));
       return {
         element: heading,
+        level,
         text: String(heading.textContent || "").trim()
       };
     })
@@ -1765,11 +1767,16 @@ const buildCourseLessonToc = (bodyContainer) => {
       : `${baseHeadingID}-${nextHeadingCount}`;
   });
 
+  const minimumHeadingLevel = headingEntries.reduce((minLevel, entry) => {
+    return Math.min(minLevel, Number(entry.level || 2));
+  }, 6);
+
   tocContainer.innerHTML = headingEntries
     .map((entry) => {
       const headingID = entry.element.id;
-      const headingLevel = Number((entry.element.tagName || "H2").replace("H", ""));
-      return `<a href="#${headingID}" class="course-toc-link level-${headingLevel}" data-course-toc-link="${headingID}">${escapeHTML(entry.text)}</a>`;
+      const relativeLevel = Math.max(1, Number(entry.level || 2) - minimumHeadingLevel + 1);
+      const tocLevel = Math.min(relativeLevel, 4);
+      return `<a href="#${headingID}" class="course-toc-link level-${tocLevel}" data-course-toc-link="${headingID}">${escapeHTML(entry.text)}</a>`;
     })
     .join("");
 

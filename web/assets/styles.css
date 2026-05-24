@@ -529,14 +529,19 @@ textarea {
   color: #242424;
 }
 
-.course-toc-link.level-3 {
+.course-toc-link.level-2 {
   padding-left: 0.85rem;
   font-size: 0.94rem;
 }
 
-.course-toc-link.level-4 {
+.course-toc-link.level-3 {
   padding-left: 1.4rem;
   font-size: 0.9rem;
+}
+
+.course-toc-link.level-4 {
+  padding-left: 1.95rem;
+  font-size: 0.86rem;
 }
 
 .course-toc-link.is-active {
