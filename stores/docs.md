@@ -6,7 +6,7 @@ GORM models and persistence helpers for Explore.
 
 ## Key models
 
-- `users`, `oauth_identities`
+- `users`, `oauth_identities` (users now persist phone fields: `phone_country_code`, `phone_national_number`, `phone_e164`)
 - `posts`, `tags`, `post_tags`
 - `problems`
 - `problem_lists`, `problem_list_problems`
@@ -26,6 +26,7 @@ GORM models and persistence helpers for Explore.
 - MySQL DSN normalization (`normalizeDSN`) now enforces `parseTime=true`, `interpolateParams=true`, and safe TLS defaults for managed DBs before GORM opens the connection.
 - MySQL connection pool tuning is applied during `NewStore` (`max open/idle`, idle timeout, lifetime) to reduce connection churn.
 - User lookup + upsert with OAuth identity
+- User phone persistence helper (`UpdateUserPhone`) for post-OAuth profile completion (country code + national number + E.164 normalization).
 - Admin user listing supports optional funnel-stage filtering (via `user_metrics.stage`) and paginated list metadata.
 - Admin user activity queries expose paginated events plus merged promo decisions/impressions/clicks from existing tables (no new service layer required).
 - Post/course CRUD + HTML cache update

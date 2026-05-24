@@ -14,7 +14,8 @@ const state = {
   googleIdentityReady: false,
   googlePromptPending: false,
   googlePromptIntent: null,
-  courseTocObserver: null
+  courseTocObserver: null,
+  pendingPhoneLogin: null
 };
 
 const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia
@@ -44,6 +45,8 @@ const selectors = {
 const API = {
   config: "/config",
   authLogin: "/api/auth/login",
+  authCompletePhone: "/api/auth/complete-phone",
+  authPhoneCountries: "/api/auth/phone-countries",
   posts: "/api/posts",
   courses: "/api/courses",
   problems: "/api/problems",
@@ -8184,6 +8187,252 @@ const isLocalhost = () => {
   return host === "localhost" || host === "127.0.0.1";
 };
 
+const fallbackPhoneCountries = [
+  { region_code: "IN", dial_code: "+91" },
+  { region_code: "US", dial_code: "+1" },
+  { region_code: "GB", dial_code: "+44" },
+  { region_code: "CA", dial_code: "+1" },
+  { region_code: "AU", dial_code: "+61" },
+  { region_code: "SG", dial_code: "+65" },
+  { region_code: "AE", dial_code: "+971" }
+];
+
+let phoneCountriesRequest = null;
+let regionDisplayNames = undefined;
+
+const resolveRegionDisplayNames = () => {
+  if (regionDisplayNames !== undefined) {
+    return regionDisplayNames;
+  }
+
+  if (typeof Intl === "undefined" || typeof Intl.DisplayNames !== "function") {
+    regionDisplayNames = null;
+    return regionDisplayNames;
+  }
+
+  try {
+    const locale = navigator.language || "en";
+    regionDisplayNames = new Intl.DisplayNames([locale], { type: "region" });
+  } catch (err) {
+    regionDisplayNames = null;
+  }
+
+  return regionDisplayNames;
+};
+
+const collectDigits = (value) => String(value || "").replace(/\D/g, "");
+
+const countryDisplayName = (regionCode) => {
+  const normalizedRegionCode = String(regionCode || "").toUpperCase();
+  if (!normalizedRegionCode) {
+    return "";
+  }
+
+  const displayNames = resolveRegionDisplayNames();
+  if (!displayNames) {
+    return normalizedRegionCode;
+  }
+
+  try {
+    return displayNames.of(normalizedRegionCode) || normalizedRegionCode;
+  } catch (err) {
+    return normalizedRegionCode;
+  }
+};
+
+const normalizePhoneCountryList = (items) => {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const seen = new Set();
+  const normalized = [];
+  items.forEach((row) => {
+    const regionCode = String(row?.region_code || row?.RegionCode || "").trim().toUpperCase();
+    const dialCode = String(row?.dial_code || row?.DialCode || "").trim();
+    if (!regionCode || !dialCode) {
+      return;
+    }
+    if (seen.has(regionCode)) {
+      return;
+    }
+    seen.add(regionCode);
+    normalized.push({
+      region_code: regionCode,
+      dial_code: dialCode
+    });
+  });
+
+  normalized.sort((left, right) => {
+    const leftName = countryDisplayName(left.region_code);
+    const rightName = countryDisplayName(right.region_code);
+    if (leftName === rightName) {
+      if (left.dial_code === right.dial_code) {
+        return left.region_code.localeCompare(right.region_code);
+      }
+      return left.dial_code.localeCompare(right.dial_code);
+    }
+    return leftName.localeCompare(rightName);
+  });
+
+  return normalized;
+};
+
+const loadPhoneCountries = async () => {
+  if (!phoneCountriesRequest) {
+    phoneCountriesRequest = (async () => {
+      try {
+        const response = await fetchJSON(API.authPhoneCountries);
+        const options = normalizePhoneCountryList(response?.items || []);
+        if (options.length > 0) {
+          return options;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+
+      return normalizePhoneCountryList(fallbackPhoneCountries);
+    })();
+  }
+
+  return phoneCountriesRequest;
+};
+
+const closePhoneCollectionOverlay = () => {
+  const existingOverlay = document.getElementById("phone-collection-overlay");
+  if (existingOverlay) {
+    existingOverlay.remove();
+  }
+};
+
+const completeAuthenticatedLogin = (payload) => {
+  const token = String(payload?.token || "").trim();
+  if (!token) {
+    throw new Error("missing token");
+  }
+
+  state.token = token;
+  localStorage.setItem("jwt", token);
+  state.user = payload?.user || null;
+  setStoredUser(state.user);
+  state.pendingPhoneLogin = null;
+  window.location.reload();
+};
+
+const showPhoneCollectionOverlay = async (phoneToken) => {
+  closePhoneCollectionOverlay();
+
+  const overlay = document.createElement("div");
+  overlay.id = "phone-collection-overlay";
+  overlay.className = "fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4";
+  overlay.innerHTML = `
+    <div class="max-w-lg w-full bg-white text-ink rounded-3xl p-8 border border-slate-200">
+      <h3 class="font-display text-2xl">Add your mobile number</h3>
+      <p class="mt-3 text-slate-600">Complete your login by adding a valid phone number for your selected country.</p>
+      <form id="phone-collection-form" class="mt-6 space-y-4">
+        <label class="block">
+          <span class="text-sm font-semibold text-slate-700">Country</span>
+          <select id="phone-country-select" class="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 bg-white text-slate-800"></select>
+        </label>
+        <label class="block">
+          <span class="text-sm font-semibold text-slate-700">Mobile number</span>
+          <input id="phone-national-input" inputmode="numeric" autocomplete="tel-national" placeholder="Enter number without country code" class="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-slate-800" />
+        </label>
+        <p id="phone-collection-error" class="hidden text-sm text-rose-600"></p>
+        <div class="flex flex-col gap-3 pt-2">
+          <button id="phone-collection-submit" type="submit" class="w-full rounded-full bg-skyline text-white py-3 font-semibold">Continue</button>
+          <button id="phone-collection-cancel" type="button" class="w-full rounded-full border border-slate-200 py-3 text-slate-700">Cancel login</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const countrySelect = overlay.querySelector("#phone-country-select");
+  const nationalInput = overlay.querySelector("#phone-national-input");
+  const submitButton = overlay.querySelector("#phone-collection-submit");
+  const cancelButton = overlay.querySelector("#phone-collection-cancel");
+  const errorEl = overlay.querySelector("#phone-collection-error");
+  if (!countrySelect || !nationalInput || !submitButton || !cancelButton || !errorEl) {
+    return;
+  }
+
+  const showError = (message) => {
+    errorEl.textContent = message;
+    errorEl.classList.remove("hidden");
+  };
+
+  const clearError = () => {
+    errorEl.textContent = "";
+    errorEl.classList.add("hidden");
+  };
+
+  const countries = await loadPhoneCountries();
+  countrySelect.innerHTML = countries
+    .map((country) => `<option value="${country.region_code}">${escapeHTML(countryDisplayName(country.region_code))} (${escapeHTML(country.dial_code)})</option>`)
+    .join("");
+
+  if (countries.some((country) => country.region_code === "IN")) {
+    countrySelect.value = "IN";
+  }
+
+  const setSubmitting = (submitting) => {
+    submitButton.disabled = submitting;
+    submitButton.textContent = submitting ? "Saving..." : "Continue";
+  };
+
+  countrySelect.addEventListener("change", clearError);
+  nationalInput.addEventListener("input", () => {
+    clearError();
+    nationalInput.value = collectDigits(nationalInput.value);
+  });
+
+  cancelButton.addEventListener("click", () => {
+    clearToken();
+    closePhoneCollectionOverlay();
+    showToast("Login canceled.");
+  });
+
+  overlay.querySelector("#phone-collection-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearError();
+
+    const selectedCountryCode = String(countrySelect.value || "").trim().toUpperCase();
+    const nationalNumber = collectDigits(nationalInput.value || "");
+
+    if (!selectedCountryCode) {
+      showError("Select your country.");
+      return;
+    }
+    if (!nationalNumber) {
+      showError("Enter your phone number.");
+      return;
+    }
+    if (selectedCountryCode === "IN" && nationalNumber.length !== 10) {
+      showError("Indian phone numbers must be exactly 10 digits.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = await fetchJSON(API.authCompletePhone, {
+        method: "POST",
+        body: JSON.stringify({
+          phone_token: phoneToken,
+          country_code: selectedCountryCode,
+          national_number: nationalNumber
+        })
+      });
+      closePhoneCollectionOverlay();
+      completeAuthenticatedLogin(payload);
+    } catch (err) {
+      showError(err.message || "Unable to save phone number.");
+    } finally {
+      setSubmitting(false);
+    }
+  });
+};
+
 const handleGoogleCredential = async (response) => {
   if (!response?.credential) return;
   try {
@@ -8191,13 +8440,30 @@ const handleGoogleCredential = async (response) => {
       method: "POST",
       body: JSON.stringify({ googleToken: response.credential, anon_id: state.anonId })
     });
-    state.token = payload.token;
-    localStorage.setItem("jwt", state.token);
-    state.user = payload.user || null;
-    setStoredUser(state.user);
-    window.location.reload();
+    const googleFallbackOverlay = document.getElementById("google-login-fallback");
+    if (googleFallbackOverlay) {
+      googleFallbackOverlay.remove();
+    }
+
+    const phoneRequired = Boolean(payload?.phone_required);
+    if (phoneRequired) {
+      const phoneToken = String(payload?.phone_token || "").trim();
+      if (!phoneToken) {
+        throw new Error("Phone verification is required, but no phone token was returned.");
+      }
+      state.pendingPhoneLogin = {
+        user: payload?.user || null,
+        phoneToken
+      };
+      setStoredUser(state.pendingPhoneLogin.user);
+      await showPhoneCollectionOverlay(phoneToken);
+      return;
+    }
+
+    completeAuthenticatedLogin(payload);
   } catch (err) {
     console.error(err);
+    showToast("Google sign-in failed. Please try again.");
   }
 };
 
@@ -8208,6 +8474,8 @@ const clearToken = () => {
   clearStoredEntitlement();
   state.user = null;
   state.entitlement = null;
+  state.pendingPhoneLogin = null;
+  closePhoneCollectionOverlay();
 };
 
 const getStoredUser = () => {

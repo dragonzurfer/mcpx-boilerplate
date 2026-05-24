@@ -21,6 +21,13 @@ type IdentityLookupInput struct {
 	ProviderUserID string
 }
 
+type UserPhoneUpdateInput struct {
+	UserID              uint
+	PhoneCountryCode    string
+	PhoneNationalNumber string
+	PhoneE164           string
+}
+
 func (s *Store) GetUserByIdentity(input IdentityLookupInput) (*UserModel, error) {
 	provider := strings.TrimSpace(input.Provider)
 	providerUserID := strings.TrimSpace(input.ProviderUserID)
@@ -101,6 +108,44 @@ func (s *Store) GetOrCreateUserWithIdentity(input UserIdentityInput) (*UserModel
 		return nil, err
 	}
 	return user, nil
+}
+
+func (s *Store) UpdateUserPhone(input UserPhoneUpdateInput) (*UserModel, error) {
+	normalizedInput := normalizeUserPhoneUpdateInput(input)
+	if normalizedInput.UserID == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	if normalizedInput.PhoneCountryCode == "" {
+		return nil, gorm.ErrInvalidData
+	}
+	if normalizedInput.PhoneNationalNumber == "" {
+		return nil, gorm.ErrInvalidData
+	}
+	if normalizedInput.PhoneE164 == "" {
+		return nil, gorm.ErrInvalidData
+	}
+
+	user := UserModel{}
+	if err := s.db.Where("id = ?", normalizedInput.UserID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	updates := map[string]interface{}{
+		"phone_country_code":    normalizedInput.PhoneCountryCode,
+		"phone_national_number": normalizedInput.PhoneNationalNumber,
+		"phone_e164":            normalizedInput.PhoneE164,
+		"updated_at":            time.Now().UTC(),
+	}
+	if err := s.db.Model(&user).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	user.PhoneCountryCode = normalizedInput.PhoneCountryCode
+	user.PhoneNationalNumber = normalizedInput.PhoneNationalNumber
+	user.PhoneE164 = normalizedInput.PhoneE164
+
+	s.cacheSet(userByIDKey(user.ID), &user)
+	return &user, nil
 }
 
 func getOrCreateUserByIdentity(db *gorm.DB, input UserIdentityInput) (*UserModel, error) {
@@ -201,4 +246,11 @@ func applyUserUpdates(db *gorm.DB, user *UserModel, input UserIdentityInput) (*U
 
 func errorsIsNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
+}
+
+func normalizeUserPhoneUpdateInput(input UserPhoneUpdateInput) UserPhoneUpdateInput {
+	input.PhoneCountryCode = strings.ToUpper(strings.TrimSpace(input.PhoneCountryCode))
+	input.PhoneNationalNumber = strings.TrimSpace(input.PhoneNationalNumber)
+	input.PhoneE164 = strings.TrimSpace(input.PhoneE164)
+	return input
 }

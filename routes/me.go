@@ -36,14 +36,16 @@ func (h *MeHandler) me(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"user": gin.H{
-			"id":     user.ID,
-			"email":  user.Email,
-			"name":   user.Name,
-			"avatar": user.AvatarURL,
-			"role":   user.Role,
+			"id":                 user.ID,
+			"email":              user.Email,
+			"name":               user.Name,
+			"avatar":             user.AvatarURL,
+			"role":               user.Role,
+			"phone_country_code": user.PhoneCountryCode,
+			"phone_e164":         user.PhoneE164,
 		},
-		"stage":        stage,
-		"entitlement":  entitlementPayload,
+		"stage":       stage,
+		"entitlement": entitlementPayload,
 	})
 }
 

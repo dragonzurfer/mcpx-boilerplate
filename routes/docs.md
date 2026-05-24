@@ -6,10 +6,10 @@ HTTP handlers for public, authenticated, and admin APIs plus server-rendered pag
 
 ## Files
 
-- `auth.go`: Google ID token exchange → JWT.
+- `auth.go`: Google ID token exchange → JWT with first-login phone gating. Users without a saved phone receive `phone_required=true` and a short-lived `phone_token`; `/api/auth/complete-phone` validates country + national number and only then issues the app JWT. `/api/auth/phone-countries` exposes supported region/dial-code options for the client selector.
 - `config.go`: client config (site + auth + Razorpay key id).
 - `health.go`: liveness endpoint (`/healthz`).
-- `me.go`: `/api/me` profile + stage + entitlement.
+- `me.go`: `/api/me` profile + stage + entitlement, now including stored phone metadata (`phone_country_code`, `phone_e164`) for authenticated session hydration.
 - `posts.go`: public post listing + detail (gated by access level).
 - `courses.go`: public course listing plus signed-in course detail/lesson APIs (module + lesson structure with per-lesson lock checks).
 - `problems.go`: public practice APIs for published problems, problem detail, and list-based problem library payloads (including per-user solved flags plus solved/total difficulty stats when authenticated; solved is derived from accepted `SUBMIT` attempts only); problem detail now returns `official_solutions` from `problems.solutions_json` so the editorial tab can render reference implementations with language metadata.
