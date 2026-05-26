@@ -1843,26 +1843,43 @@ const initCourseExplorer = async ({ course }) => {
 
   const renderSidebar = () => {
     sidebar.innerHTML = modules
-      .map((module) => {
+      .map((module, moduleIndex) => {
         const lessons = Array.isArray(module.lessons) ? module.lessons : [];
         const isExpanded = module.id === expandedModuleID;
+        const moduleSequence = String(moduleIndex + 1).padStart(2, "0");
+        const chevronClass = isExpanded ? "is-expanded" : "";
+        const moduleTitle = escapeHTML(module.title || "Module");
         return `
-          <div class="rounded-2xl border border-slate-200 bg-white p-3">
-            <button class="w-full flex items-center justify-between gap-3 text-left" data-course-module="${module.id}">
-              <span class="font-semibold text-slate-800">${module.title || "Module"}</span>
-              <span class="text-xs text-slate-500">${lessons.length} lessons</span>
+          <section class="roadmap-module-card">
+            <button
+              class="roadmap-module-trigger"
+              data-course-module="${module.id}"
+              aria-expanded="${isExpanded}"
+              aria-controls="roadmap-module-panel-${module.id}"
+            >
+              <span class="roadmap-module-seq">${moduleSequence}</span>
+              <span class="roadmap-module-copy">
+                <span class="roadmap-module-title">${moduleTitle}</span>
+                <span class="roadmap-module-meta">${lessons.length} lesson${lessons.length === 1 ? "" : "s"}</span>
+              </span>
+              <span class="roadmap-module-chevron ${chevronClass}" aria-hidden="true"></span>
             </button>
-            <div class="mt-3 space-y-2 ${isExpanded ? "" : "hidden"}" data-course-module-panel="${module.id}">
+            <div
+              id="roadmap-module-panel-${module.id}"
+              class="roadmap-module-panel ${isExpanded ? "" : "hidden"}"
+              data-course-module-panel="${module.id}"
+            >
               ${lessons.map((lesson) => renderCourseLessonLink(lesson, selectedLessonSlug)).join("")}
             </div>
-          </div>
+          </section>
         `;
       })
       .join("");
 
     sidebar.querySelectorAll("[data-course-module]").forEach((button) => {
       button.addEventListener("click", () => {
-        expandedModuleID = Number(button.dataset.courseModule || 0);
+        const nextModuleID = Number(button.dataset.courseModule || 0);
+        expandedModuleID = expandedModuleID === nextModuleID ? 0 : nextModuleID;
         renderSidebar();
       });
     });
@@ -1952,15 +1969,20 @@ const initCourseExplorer = async ({ course }) => {
 const renderCourseLessonLink = (lesson, selectedLessonSlug) => {
   const isLocked = Boolean(lesson.is_locked);
   const isSelected = lesson.slug === selectedLessonSlug;
-  const lockIcon = isLocked ? "&#128274;" : "&#128275;";
-  const lockLabel = isLocked ? "Locked" : "Unlocked";
-  const selectedClasses = isSelected ? "border-primary/60 bg-primary/5" : "border-slate-200 bg-white";
+  const lessonTitle = escapeHTML(lesson.title || "Lesson");
+  const stateLabel = isLocked ? "Locked" : lesson.is_free ? "Free" : "Members";
+  const selectedClass = isSelected ? "is-selected" : "";
+  const lockedClass = isLocked ? "is-locked" : "";
+  const lockIcon = isLocked ? "🔒" : "•";
+
   return `
-    <button class="w-full rounded-xl border ${selectedClasses} px-3 py-2 text-left transition hover:border-primary/50"
+    <button
+      class="roadmap-lesson-item ${selectedClass} ${lockedClass}"
       data-course-lesson="${lesson.slug}" data-course-lesson-id="${Number(lesson.id || 0)}" data-course-lesson-locked="${isLocked}">
-      <div class="flex items-center justify-between gap-2">
-        <span class="text-sm text-slate-800">${lesson.title || "Lesson"}</span>
-        <span class="text-xs text-slate-500">${lockIcon} ${lockLabel}</span>
+      <div class="roadmap-lesson-row">
+        <span class="roadmap-lesson-bullet" aria-hidden="true">${lockIcon}</span>
+        <span class="roadmap-lesson-title">${lessonTitle}</span>
+        <span class="roadmap-lesson-pill">${stateLabel}</span>
       </div>
     </button>
   `;
