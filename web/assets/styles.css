@@ -453,23 +453,12 @@ textarea {
   background: #ffffff;
   box-shadow: none;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
   align-self: start;
-  min-height: 0;
-  max-height: calc(100dvh - 7rem);
-  overflow: hidden;
 }
 
 #course-modules-sidebar {
-  flex: 1 1 auto;
   display: grid;
   gap: 0.65rem;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-right: 0.2rem;
-  overscroll-behavior: contain;
 }
 
 .roadmap-module-card {
@@ -544,8 +533,34 @@ textarea {
 .roadmap-module-panel {
   border-top: 1px solid #eef2f7;
   padding: 0.55rem;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.45rem;
+  max-height: min(56dvh, 25rem);
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+.roadmap-module-panel::-webkit-scrollbar {
+  width: 0.62rem;
+}
+
+.roadmap-module-panel::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 999px;
+}
+
+.roadmap-module-panel::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 999px;
+}
+
+.roadmap-module-panel::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 .roadmap-lesson-item {
@@ -2083,12 +2098,6 @@ textarea {
   .course-roadmap {
     order: 2;
     padding: 0.95rem;
-    max-height: min(72dvh, 34rem);
-  }
-
-  #course-modules-sidebar {
-    overflow-y: auto;
-    padding-right: 0.1rem;
   }
 
   .roadmap-module-trigger {
@@ -2097,6 +2106,7 @@ textarea {
 
   .roadmap-module-panel {
     padding: 0.48rem;
+    max-height: min(48dvh, 20rem);
   }
 
   .course-lesson-header,
@@ -2137,6 +2147,10 @@ textarea {
 
   .course-roadmap {
     padding: 0.8rem;
+  }
+
+  .roadmap-module-panel {
+    max-height: min(44dvh, 18rem);
   }
 
   .roadmap-module-title {
