@@ -456,14 +456,18 @@ textarea {
   display: flex;
   flex-direction: column;
   align-self: start;
-  max-height: calc(100vh - 7rem);
+  min-height: 0;
+  max-height: calc(100dvh - 7rem);
+  overflow: hidden;
 }
 
 #course-modules-sidebar {
+  flex: 1 1 auto;
   display: grid;
   gap: 0.65rem;
   min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding-right: 0.2rem;
   overscroll-behavior: contain;
 }
@@ -2079,12 +2083,12 @@ textarea {
   .course-roadmap {
     order: 2;
     padding: 0.95rem;
-    max-height: none;
+    max-height: min(72dvh, 34rem);
   }
 
   #course-modules-sidebar {
-    overflow-y: visible;
-    padding-right: 0;
+    overflow-y: auto;
+    padding-right: 0.1rem;
   }
 
   .roadmap-module-trigger {
