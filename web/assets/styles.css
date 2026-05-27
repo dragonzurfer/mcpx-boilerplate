@@ -453,11 +453,19 @@ textarea {
   background: #ffffff;
   box-shadow: none;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-self: start;
+  max-height: calc(100vh - 7rem);
 }
 
 #course-modules-sidebar {
   display: grid;
   gap: 0.65rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+  overscroll-behavior: contain;
 }
 
 .roadmap-module-card {
@@ -2071,6 +2079,12 @@ textarea {
   .course-roadmap {
     order: 2;
     padding: 0.95rem;
+    max-height: none;
+  }
+
+  #course-modules-sidebar {
+    overflow-y: visible;
+    padding-right: 0;
   }
 
   .roadmap-module-trigger {

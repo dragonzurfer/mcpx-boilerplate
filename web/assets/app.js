@@ -1837,7 +1837,12 @@ const initCourseExplorer = async ({ course }) => {
     roadmapMeta.textContent = `${totalLessons} lesson${totalLessons === 1 ? "" : "s"}`;
   }
 
-  let expandedModuleID = modules[0]?.id || 0;
+  const resolveModuleKey = (module) => {
+    if (!module || module.id === undefined || module.id === null) return "";
+    return String(module.id);
+  };
+
+  let expandedModuleKey = resolveModuleKey(modules[0]);
   let selectedLessonSlug = course.selected_lesson_slug || findFirstUnlockedLessonSlug(modules);
   let stopLessonTracking = null;
 
@@ -1845,7 +1850,8 @@ const initCourseExplorer = async ({ course }) => {
     sidebar.innerHTML = modules
       .map((module, moduleIndex) => {
         const lessons = Array.isArray(module.lessons) ? module.lessons : [];
-        const isExpanded = module.id === expandedModuleID;
+        const moduleKey = resolveModuleKey(module);
+        const isExpanded = moduleKey !== "" && moduleKey === expandedModuleKey;
         const moduleSequence = String(moduleIndex + 1).padStart(2, "0");
         const chevronClass = isExpanded ? "is-expanded" : "";
         const moduleTitle = escapeHTML(module.title || "Module");
@@ -1853,7 +1859,7 @@ const initCourseExplorer = async ({ course }) => {
           <section class="roadmap-module-card">
             <button
               class="roadmap-module-trigger"
-              data-course-module="${module.id}"
+              data-course-module="${escapeHTML(moduleKey)}"
               aria-expanded="${isExpanded}"
               aria-controls="roadmap-module-panel-${module.id}"
             >
@@ -1878,8 +1884,8 @@ const initCourseExplorer = async ({ course }) => {
 
     sidebar.querySelectorAll("[data-course-module]").forEach((button) => {
       button.addEventListener("click", () => {
-        const nextModuleID = Number(button.dataset.courseModule || 0);
-        expandedModuleID = expandedModuleID === nextModuleID ? 0 : nextModuleID;
+        const nextModuleKey = String(button.dataset.courseModule || "");
+        expandedModuleKey = expandedModuleKey === nextModuleKey ? "" : nextModuleKey;
         renderSidebar();
       });
     });
