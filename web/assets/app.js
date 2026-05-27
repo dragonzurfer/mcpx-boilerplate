@@ -1854,11 +1854,12 @@ const initCourseExplorer = async ({ course }) => {
         const isExpanded = moduleKey !== "" && moduleKey === expandedModuleKey;
         const moduleSequence = String(moduleIndex + 1).padStart(2, "0");
         const chevronClass = isExpanded ? "is-expanded" : "";
+        const moduleTriggerClass = isExpanded ? "is-expanded" : "";
         const moduleTitle = escapeHTML(module.title || "Module");
         return `
           <section class="roadmap-module-card">
             <button
-              class="roadmap-module-trigger"
+              class="roadmap-module-trigger ${moduleTriggerClass}"
               data-course-module="${escapeHTML(moduleKey)}"
               aria-expanded="${isExpanded}"
               aria-controls="roadmap-module-panel-${module.id}"
