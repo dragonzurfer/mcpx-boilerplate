@@ -116,31 +116,10 @@
       </div>
       <div id="course-modules" class="mt-6 space-y-4"></div>
 
-      <form id="course-lesson-editor" class="mt-8 space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
-        <p class="text-xs uppercase tracking-wide text-slate-500">Lesson editor</p>
-        <input type="hidden" id="course-lesson-id" />
-        <input type="hidden" id="course-lesson-module-id" />
-        <input id="course-lesson-title" placeholder="Lesson title" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
-        <input id="course-lesson-slug" placeholder="Lesson slug" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
-        <div class="grid gap-3 md:grid-cols-2">
-          <input id="course-lesson-vimeo" placeholder="Vimeo URL (optional)" class="rounded-2xl border border-slate-200 px-4 py-3 text-slate-700" />
-          <select id="course-lesson-status" class="rounded-2xl border border-slate-200 px-4 py-3 text-slate-700">
-            <option value="DRAFT">DRAFT</option>
-            <option value="PUBLISHED">PUBLISHED</option>
-            <option value="SCHEDULED">SCHEDULED</option>
-            <option value="ARCHIVED">ARCHIVED</option>
-          </select>
-        </div>
-        <label class="flex items-center gap-2 text-sm text-slate-600">
-          <input type="checkbox" id="course-lesson-free" class="rounded border-slate-300" />
-          Free lesson
-        </label>
-        <textarea id="course-lesson-body" rows="8" placeholder="Lesson markdown content" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-700"></textarea>
-        <div class="flex gap-3">
-          <button type="submit" class="flex-1 rounded-full bg-primary text-white py-3 font-semibold">Save lesson</button>
-          <button type="button" id="course-lesson-reset" class="flex-1 rounded-full border border-slate-200 py-3 text-slate-700">Reset lesson form</button>
-        </div>
-      </form>
+      <div class="mt-8 rounded-2xl border border-slate-200 bg-white p-5">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Lesson editor workflow</p>
+        <p class="mt-2 text-sm text-slate-700">Use <span class="font-semibold">Add lesson</span> or <span class="font-semibold">Edit</span> from a lesson row to open the dedicated lesson editor in a new tab with live markdown preview.</p>
+      </div>
     </section>
   </main>
 </div>

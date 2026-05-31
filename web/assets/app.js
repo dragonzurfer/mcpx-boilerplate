@@ -132,6 +132,9 @@ const renderPageForRoute = async (page) => {
   if (page === "admin-courses") {
     await renderAdminCourses();
   }
+  if (page === "admin-course-lesson-editor") {
+    await renderAdminCourseLessonEditor();
+  }
   if (page === "admin-problems") {
     await renderAdminProblems();
   }
@@ -3514,11 +3517,28 @@ const renderAdminCourses = async () => {
   const moduleAddBtn = document.getElementById("course-module-add");
   const modulesContainer = document.getElementById("course-modules");
   const structureTitle = document.getElementById("course-structure-title");
-  const lessonForm = document.getElementById("course-lesson-editor");
-  const lessonResetBtn = document.getElementById("course-lesson-reset");
 
   let selectedCourseID = 0;
   let selectedCourse = null;
+
+  const openLessonEditorTab = (courseID, moduleID, lessonID = 0) => {
+    const numericCourseID = Number(courseID || 0);
+    const numericModuleID = Number(moduleID || 0);
+    if (!numericCourseID || !numericModuleID) {
+      setError(errorEl, "Select a course and module before opening lesson editor.");
+      return;
+    }
+
+    const params = new URLSearchParams({
+      course_id: String(numericCourseID),
+      module_id: String(numericModuleID)
+    });
+    if (Number(lessonID || 0) > 0) {
+      params.set("lesson_id", String(Number(lessonID)));
+    }
+    const targetPath = `/admin/courses/lesson-editor?${params.toString()}`;
+    window.open(targetPath, "_blank", "noopener");
+  };
 
   const resetCourseEditor = () => {
     if (editorForm) editorForm.reset();
@@ -3528,14 +3548,6 @@ const renderAdminCourses = async () => {
     if (editorTitle) editorTitle.textContent = "New course";
     if (structureTitle) structureTitle.textContent = "Select a course to manage modules";
     if (modulesContainer) modulesContainer.innerHTML = "";
-    resetLessonEditor();
-  };
-
-  const resetLessonEditor = (moduleID = "") => {
-    if (lessonForm) lessonForm.reset();
-    document.getElementById("course-lesson-id").value = "";
-    document.getElementById("course-lesson-module-id").value = moduleID ? String(moduleID) : "";
-    document.getElementById("course-lesson-status").value = "DRAFT";
   };
 
   const buildCoursePayload = () => {
@@ -3595,7 +3607,6 @@ const renderAdminCourses = async () => {
       renderCourseModules(course);
       if (editorTitle) editorTitle.textContent = `Editing: ${course.title || "Course"}`;
       if (structureTitle) structureTitle.textContent = `Modules: ${course.title || "Course"}`;
-      resetLessonEditor();
     } catch (err) {
       setError(errorEl, err.message || "Failed to load course details.");
     }
@@ -3699,8 +3710,7 @@ const renderAdminCourses = async () => {
       button.addEventListener("click", () => {
         const moduleID = Number(button.dataset.moduleAddLesson || 0);
         if (!moduleID) return;
-        resetLessonEditor(moduleID);
-        document.getElementById("course-lesson-title").focus();
+        openLessonEditorTab(selectedCourseID, moduleID);
       });
     });
 
@@ -3708,10 +3718,8 @@ const renderAdminCourses = async () => {
       button.addEventListener("click", () => {
         const moduleID = Number(button.dataset.lessonModule || 0);
         const lessonID = Number(button.dataset.lessonEdit || 0);
-        const module = modules.find((item) => Number(item.id) === moduleID);
-        const lesson = (module?.lessons || []).find((item) => Number(item.id) === lessonID);
-        if (!lesson) return;
-        fillLessonEditor(moduleID, lesson);
+        if (!moduleID || !lessonID) return;
+        openLessonEditorTab(selectedCourseID, moduleID, lessonID);
       });
     });
     modulesContainer.querySelectorAll("[data-lesson-delete]").forEach((button) => {
@@ -3738,17 +3746,6 @@ const renderAdminCourses = async () => {
         await reorderLessons(modules, moduleID, lessonID, 1);
       });
     });
-  };
-
-  const fillLessonEditor = (moduleID, lesson) => {
-    document.getElementById("course-lesson-id").value = lesson.id || "";
-    document.getElementById("course-lesson-module-id").value = moduleID || "";
-    document.getElementById("course-lesson-title").value = lesson.title || "";
-    document.getElementById("course-lesson-slug").value = lesson.slug || "";
-    document.getElementById("course-lesson-vimeo").value = lesson.vimeo_url || "";
-    document.getElementById("course-lesson-status").value = lesson.status || "DRAFT";
-    document.getElementById("course-lesson-free").checked = Boolean(lesson.is_free);
-    document.getElementById("course-lesson-body").value = lesson.body_markdown || "";
   };
 
   const reorderModules = async (modules, moduleID, direction) => {
@@ -3845,55 +3842,226 @@ const renderAdminCourses = async () => {
     });
   }
 
-  if (lessonForm) {
-    lessonForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      clearError(errorEl);
-      if (!selectedCourseID) {
-        setError(errorEl, "Save and select a course first.");
-        return;
-      }
-
-      const lessonID = document.getElementById("course-lesson-id").value;
-      const moduleID = document.getElementById("course-lesson-module-id").value;
-      const payload = {
-        title: document.getElementById("course-lesson-title").value.trim(),
-        slug: document.getElementById("course-lesson-slug").value.trim(),
-        vimeo_url: document.getElementById("course-lesson-vimeo").value.trim(),
-        status: document.getElementById("course-lesson-status").value,
-        is_free: document.getElementById("course-lesson-free").checked,
-        body_markdown: document.getElementById("course-lesson-body").value.trim()
-      };
-      const validationError = validateCourseLessonPayload(payload, moduleID);
-      if (validationError) {
-        setError(errorEl, validationError);
-        return;
-      }
-
-      try {
-        const method = lessonID ? "PUT" : "POST";
-        const path = lessonID
-          ? `/api/admin/courses/${selectedCourseID}/modules/${moduleID}/lessons/${lessonID}`
-          : `/api/admin/courses/${selectedCourseID}/modules/${moduleID}/lessons`;
-        await fetchJSON(path, { method, body: JSON.stringify(payload) });
-        showToast("Lesson saved");
-        resetLessonEditor(moduleID);
-        await loadCourseDetail(String(selectedCourseID));
-      } catch (err) {
-        setError(errorEl, err.message || "Failed to save lesson.");
-      }
-    });
-  }
-
-  if (lessonResetBtn) {
-    lessonResetBtn.addEventListener("click", () => {
-      const moduleID = document.getElementById("course-lesson-module-id").value;
-      resetLessonEditor(moduleID);
-    });
-  }
-
   resetCourseEditor();
   await loadCourses();
+};
+
+const renderAdminCourseLessonEditor = async () => {
+  const errorEl = document.getElementById("admin-course-lesson-editor-error");
+  clearError(errorEl);
+  if (!requireAdmin(errorEl)) return;
+
+  const form = document.getElementById("course-lesson-editor-page-form");
+  const headingEl = document.getElementById("lesson-editor-heading");
+  const subheadingEl = document.getElementById("lesson-editor-subheading");
+  const contextEl = document.getElementById("course-lesson-page-context");
+  const courseIDInput = document.getElementById("course-lesson-page-course-id");
+  const moduleIDInput = document.getElementById("course-lesson-page-module-id");
+  const lessonIDInput = document.getElementById("course-lesson-page-id");
+  const titleInput = document.getElementById("course-lesson-page-title");
+  const slugInput = document.getElementById("course-lesson-page-slug");
+  const vimeoInput = document.getElementById("course-lesson-page-vimeo");
+  const statusInput = document.getElementById("course-lesson-page-status");
+  const freeInput = document.getElementById("course-lesson-page-free");
+  const bodyInput = document.getElementById("course-lesson-page-body");
+  const previewEl = document.getElementById("course-lesson-page-preview");
+  const resetBtn = document.getElementById("course-lesson-page-reset");
+  if (!form || !bodyInput || !previewEl) return;
+
+  const queryParams = new URLSearchParams(window.location.search);
+  const courseID = Number(queryParams.get("course_id") || 0);
+  const moduleID = Number(queryParams.get("module_id") || 0);
+  let lessonID = Number(queryParams.get("lesson_id") || 0);
+
+  if (!courseID || !moduleID) {
+    setError(errorEl, "Missing course_id/module_id. Open this page from the course builder.");
+    return;
+  }
+
+  let initialLesson = {
+    title: "",
+    slug: "",
+    vimeo_url: "",
+    status: "DRAFT",
+    is_free: false,
+    body_markdown: ""
+  };
+  let selectedCourseTitle = "";
+  let selectedModuleTitle = "";
+
+  const previewFallback = "<p class=\"text-slate-500\">Start typing markdown on the left. Completed lines will render here.</p>";
+
+  const applyLessonToForm = (lesson) => {
+    titleInput.value = lesson.title || "";
+    slugInput.value = lesson.slug || "";
+    vimeoInput.value = lesson.vimeo_url || "";
+    statusInput.value = lesson.status || "DRAFT";
+    freeInput.checked = Boolean(lesson.is_free);
+    bodyInput.value = lesson.body_markdown || "";
+  };
+
+  const currentCursorLineIndex = (text, cursorIndex) => {
+    const normalizedCursor = Math.max(0, Math.min(text.length, Number(cursorIndex || 0)));
+    const beforeCursor = text.slice(0, normalizedCursor);
+    return beforeCursor.split(/\r\n|\n|\r/).length - 1;
+  };
+
+  const completedMarkdownForPreview = () => {
+    const markdown = String(bodyInput.value || "");
+    const lines = markdown.split(/\r\n|\n|\r/);
+    const activeCursor =
+      document.activeElement === bodyInput
+        ? bodyInput.selectionStart
+        : markdown.length;
+    const lineIndex = currentCursorLineIndex(markdown, activeCursor);
+    if (lineIndex <= 0) return "";
+    return lines.slice(0, lineIndex).join("\n");
+  };
+
+  const updatePreview = () => {
+    const previewMarkdown = completedMarkdownForPreview();
+    if (!previewMarkdown.trim()) {
+      previewEl.innerHTML = previewFallback;
+      return;
+    }
+    setMarkdownContent(previewEl, previewMarkdown, previewFallback);
+  };
+
+  try {
+    const data = await fetchJSON(`/api/admin/courses/${courseID}`);
+    const course = data.course || {};
+    const modules = Array.isArray(course.modules) ? course.modules : [];
+    const selectedModule = modules.find((item) => Number(item.id) === moduleID);
+    if (!selectedModule) {
+      setError(errorEl, "Selected module was not found in this course.");
+      return;
+    }
+
+    const lessons = Array.isArray(selectedModule.lessons) ? selectedModule.lessons : [];
+    const selectedLesson = lessonID
+      ? lessons.find((item) => Number(item.id) === lessonID)
+      : null;
+
+    if (lessonID && !selectedLesson) {
+      setError(errorEl, "Selected lesson was not found in this module.");
+      return;
+    }
+
+    selectedCourseTitle = course.title || "Course";
+    selectedModuleTitle = selectedModule.title || "Module";
+    contextEl.textContent = `Course: ${selectedCourseTitle} · Module: ${selectedModuleTitle}`;
+
+    courseIDInput.value = String(courseID);
+    moduleIDInput.value = String(moduleID);
+    lessonIDInput.value = lessonID ? String(lessonID) : "";
+
+    if (selectedLesson) {
+      initialLesson = {
+        title: selectedLesson.title || "",
+        slug: selectedLesson.slug || "",
+        vimeo_url: selectedLesson.vimeo_url || "",
+        status: selectedLesson.status || "DRAFT",
+        is_free: Boolean(selectedLesson.is_free),
+        body_markdown: selectedLesson.body_markdown || ""
+      };
+      if (headingEl) {
+        headingEl.textContent = `Edit lesson: ${initialLesson.title || "Untitled lesson"}`;
+      }
+      if (subheadingEl) {
+        subheadingEl.textContent = "Editing existing lesson markdown with live completed-line preview.";
+      }
+    } else {
+      if (headingEl) {
+        headingEl.textContent = "New lesson";
+      }
+      if (subheadingEl) {
+        subheadingEl.textContent = "Create a new lesson in this module with live completed-line markdown preview.";
+      }
+    }
+
+    applyLessonToForm(initialLesson);
+    updatePreview();
+  } catch (err) {
+    setError(errorEl, err.message || "Failed to load lesson editor context.");
+    return;
+  }
+
+  const updateUrlLessonID = (nextLessonID) => {
+    if (!nextLessonID) return;
+    const nextParams = new URLSearchParams(window.location.search);
+    nextParams.set("lesson_id", String(nextLessonID));
+    const nextURL = `${window.location.pathname}?${nextParams.toString()}`;
+    window.history.replaceState(null, "", nextURL);
+  };
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearError(errorEl);
+
+    const payload = {
+      title: titleInput.value.trim(),
+      slug: slugInput.value.trim(),
+      vimeo_url: vimeoInput.value.trim(),
+      status: statusInput.value,
+      is_free: freeInput.checked,
+      body_markdown: bodyInput.value
+    };
+    const validationError = validateCourseLessonPayload(
+      { ...payload, body_markdown: payload.body_markdown.trim() },
+      moduleID,
+    );
+    if (validationError) {
+      setError(errorEl, validationError);
+      return;
+    }
+
+    try {
+      const method = lessonID ? "PUT" : "POST";
+      const path = lessonID
+        ? `/api/admin/courses/${courseID}/modules/${moduleID}/lessons/${lessonID}`
+        : `/api/admin/courses/${courseID}/modules/${moduleID}/lessons`;
+      const response = await fetchJSON(path, { method, body: JSON.stringify(payload) });
+      const savedLesson = response?.lesson || {};
+      lessonID = Number(savedLesson.id || lessonID || 0);
+      if (lessonID) {
+        lessonIDInput.value = String(lessonID);
+        updateUrlLessonID(lessonID);
+      }
+
+      initialLesson = {
+        title: savedLesson.title || payload.title,
+        slug: savedLesson.slug || payload.slug,
+        vimeo_url: savedLesson.vimeo_url || payload.vimeo_url,
+        status: savedLesson.status || payload.status || "DRAFT",
+        is_free: savedLesson.is_free ?? payload.is_free,
+        body_markdown: typeof savedLesson.body_markdown === "string" ? savedLesson.body_markdown : payload.body_markdown
+      };
+      applyLessonToForm(initialLesson);
+      updatePreview();
+
+      if (headingEl) {
+        headingEl.textContent = `Edit lesson: ${initialLesson.title || "Untitled lesson"}`;
+      }
+      if (subheadingEl) {
+        subheadingEl.textContent = `Saved to ${selectedCourseTitle} / ${selectedModuleTitle}.`;
+      }
+      showToast("Lesson saved");
+    } catch (err) {
+      setError(errorEl, err.message || "Failed to save lesson.");
+    }
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      applyLessonToForm(initialLesson);
+      updatePreview();
+    });
+  }
+
+  bodyInput.addEventListener("input", updatePreview);
+  bodyInput.addEventListener("click", updatePreview);
+  bodyInput.addEventListener("keyup", updatePreview);
+  bodyInput.addEventListener("focus", updatePreview);
 };
 
 const renderAdminCourseRow = (course) => {

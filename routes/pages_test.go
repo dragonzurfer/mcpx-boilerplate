@@ -33,6 +33,7 @@ func TestLoadTemplatesIncludesAdminPages(t *testing.T) {
 		"admin_dashboard",
 		"admin_posts",
 		"admin_courses",
+		"admin_course_lesson_editor",
 		"admin_problems",
 		"admin_funnel",
 		"admin_promos",

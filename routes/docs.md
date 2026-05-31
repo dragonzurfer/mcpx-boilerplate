@@ -21,7 +21,7 @@ HTTP handlers for public, authenticated, and admin APIs plus server-rendered pag
 - `promos.go`: promo decision + impression/click logging across post/course/practice contexts (`entity_type` + `entity_id`, with legacy `post_id` compatibility for post surfaces).
 - `payments.go`: Razorpay order creation, confirm, webhook.
 - `seo.go`: robots, sitemap, RSS, OG images (`/og/post/:slug`, `/og/course/:slug`).
-- `pages.go`: SSR templates for home/post/pricing/tools/courses/practice + practice detail + account and admin pages (including post analytics, admin courses, and admin problems pages).
+- `pages.go`: SSR templates for home/post/pricing/tools/courses/practice + practice detail + account and admin pages (including post analytics, admin courses, the dedicated admin lesson editor page at `/admin/courses/lesson-editor`, and admin problems pages).
 - `admin_posts.go`: admin CRUD for posts (tag de-duplication to avoid duplicate post_tags).
 - `admin_courses.go`: admin CRUD for courses, metadata, modules, lessons, and module/lesson reordering.
 - `admin_problems.go`: admin CRUD for practice problems, including IO spec + constraints JSON and editorial content.

@@ -24,29 +24,30 @@ func LoadTemplates() (map[string]*template.Template, error) {
 	nav := filepath.Join("web", "templates", "partials", "nav.html")
 	adminNav := filepath.Join("web", "templates", "partials", "admin_nav.html")
 	pages := map[string]string{
-		"home":                 filepath.Join("web", "templates", "home.html"),
-		"post":                 filepath.Join("web", "templates", "post.html"),
-		"pricing":              filepath.Join("web", "templates", "pricing.html"),
-		"tools":                filepath.Join("web", "templates", "tools.html"),
-		"tool":                 filepath.Join("web", "templates", "tool.html"),
-		"tool_desktop":         filepath.Join("web", "templates", "tool_desktop.html"),
-		"courses":              filepath.Join("web", "templates", "courses.html"),
-		"course":               filepath.Join("web", "templates", "course.html"),
-		"practice":             filepath.Join("web", "templates", "practice.html"),
-		"practice_problem":     filepath.Join("web", "templates", "practice_problem.html"),
-		"desktop_link":         filepath.Join("web", "templates", "desktop_link.html"),
-		"account":              filepath.Join("web", "templates", "account.html"),
-		"admin_dashboard":      filepath.Join("web", "templates", "admin_dashboard.html"),
-		"admin_posts":          filepath.Join("web", "templates", "admin_posts.html"),
-		"admin_courses":        filepath.Join("web", "templates", "admin_courses.html"),
-		"admin_problems":       filepath.Join("web", "templates", "admin_problems.html"),
-		"admin_post_analytics": filepath.Join("web", "templates", "admin_post_analytics.html"),
-		"admin_funnel":         filepath.Join("web", "templates", "admin_funnel.html"),
-		"admin_promos":         filepath.Join("web", "templates", "admin_promos.html"),
-		"admin_tools":          filepath.Join("web", "templates", "admin_tools.html"),
-		"admin_users":          filepath.Join("web", "templates", "admin_users.html"),
-		"admin_settings":       filepath.Join("web", "templates", "admin_settings.html"),
-		"admin_analytics":      filepath.Join("web", "templates", "admin_analytics.html"),
+		"home":                       filepath.Join("web", "templates", "home.html"),
+		"post":                       filepath.Join("web", "templates", "post.html"),
+		"pricing":                    filepath.Join("web", "templates", "pricing.html"),
+		"tools":                      filepath.Join("web", "templates", "tools.html"),
+		"tool":                       filepath.Join("web", "templates", "tool.html"),
+		"tool_desktop":               filepath.Join("web", "templates", "tool_desktop.html"),
+		"courses":                    filepath.Join("web", "templates", "courses.html"),
+		"course":                     filepath.Join("web", "templates", "course.html"),
+		"practice":                   filepath.Join("web", "templates", "practice.html"),
+		"practice_problem":           filepath.Join("web", "templates", "practice_problem.html"),
+		"desktop_link":               filepath.Join("web", "templates", "desktop_link.html"),
+		"account":                    filepath.Join("web", "templates", "account.html"),
+		"admin_dashboard":            filepath.Join("web", "templates", "admin_dashboard.html"),
+		"admin_posts":                filepath.Join("web", "templates", "admin_posts.html"),
+		"admin_courses":              filepath.Join("web", "templates", "admin_courses.html"),
+		"admin_course_lesson_editor": filepath.Join("web", "templates", "admin_course_lesson_editor.html"),
+		"admin_problems":             filepath.Join("web", "templates", "admin_problems.html"),
+		"admin_post_analytics":       filepath.Join("web", "templates", "admin_post_analytics.html"),
+		"admin_funnel":               filepath.Join("web", "templates", "admin_funnel.html"),
+		"admin_promos":               filepath.Join("web", "templates", "admin_promos.html"),
+		"admin_tools":                filepath.Join("web", "templates", "admin_tools.html"),
+		"admin_users":                filepath.Join("web", "templates", "admin_users.html"),
+		"admin_settings":             filepath.Join("web", "templates", "admin_settings.html"),
+		"admin_analytics":            filepath.Join("web", "templates", "admin_analytics.html"),
 	}
 
 	templates := map[string]*template.Template{}
@@ -75,6 +76,7 @@ func (h *PageHandler) Register(r *gin.Engine) {
 	r.GET("/admin", h.adminDashboard)
 	r.GET("/admin/posts", h.adminPosts)
 	r.GET("/admin/courses", h.adminCourses)
+	r.GET("/admin/courses/lesson-editor", h.adminCourseLessonEditor)
 	r.GET("/admin/problems", h.adminProblems)
 	r.GET("/admin/posts/:id/analytics", h.adminPostAnalytics)
 	r.GET("/admin/funnel", h.adminFunnel)
@@ -369,6 +371,15 @@ func (h *PageHandler) adminCourses(c *gin.Context) {
 	meta.Robots = "noindex,nofollow"
 	data := pageData{Meta: meta, JSONLD: template.JS(meta.JSONLD), Theme: resolveTheme(settings)}
 	h.renderTemplate(c, "admin_courses", data)
+}
+
+func (h *PageHandler) adminCourseLessonEditor(c *gin.Context) {
+	settings := h.resolveSiteSettings()
+	meta := services.BuildMeta(services.MetaBuildInput{PageType: services.PageTypeHome, Site: settings})
+	meta.Title = "Lesson Editor | " + meta.SiteName
+	meta.Robots = "noindex,nofollow"
+	data := pageData{Meta: meta, JSONLD: template.JS(meta.JSONLD), Theme: resolveTheme(settings)}
+	h.renderTemplate(c, "admin_course_lesson_editor", data)
 }
 
 func (h *PageHandler) adminProblems(c *gin.Context) {
