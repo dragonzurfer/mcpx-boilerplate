@@ -2000,40 +2000,6 @@ const initCourseExplorer = async ({ course }) => {
     };
   };
 
-  const shareModule = async (moduleID) => {
-    const module = findCourseModuleByID(modules, moduleID);
-    if (!module) return;
-
-    const moduleURL = buildCourseDeepLink({
-      courseSlug: course.slug || "",
-      moduleID: Number(module.id || 0),
-      lessonSlug: ""
-    });
-
-    await openShareDialog({
-      title: `Share module: ${module.title || "Module"}`,
-      url: moduleURL,
-      text: `${course.title || "Course"} - ${module.title || "Module"}`
-    });
-  };
-
-  const shareLesson = async (moduleID, lessonSlug) => {
-    const lessonMatch = findCourseLessonMatchBySlug(modules, lessonSlug);
-    if (!lessonMatch?.lesson) return;
-
-    const lessonURL = buildCourseDeepLink({
-      courseSlug: course.slug || "",
-      moduleID,
-      lessonSlug: lessonMatch.lesson.slug || ""
-    });
-
-    await openShareDialog({
-      title: `Share lesson: ${lessonMatch.lesson.title || "Lesson"}`,
-      url: lessonURL,
-      text: `${course.title || "Course"} - ${lessonMatch.lesson.title || "Lesson"}`
-    });
-  };
-
   const renderSidebar = () => {
     sidebar.innerHTML = modules
       .map((module, moduleIndex) => {
@@ -2046,30 +2012,20 @@ const initCourseExplorer = async ({ course }) => {
         const moduleTitle = escapeHTML(module.title || "Module");
         return `
           <section class="roadmap-module-card">
-            <div class="roadmap-module-head">
-              <button
-                class="roadmap-module-trigger ${moduleTriggerClass}"
-                data-course-module="${escapeHTML(moduleKey)}"
-                data-course-module-id="${Number(module.id || 0)}"
-                aria-expanded="${isExpanded}"
-                aria-controls="roadmap-module-panel-${module.id}"
-              >
-                <span class="roadmap-module-seq">${moduleSequence}</span>
-                <span class="roadmap-module-copy">
-                  <span class="roadmap-module-title">${moduleTitle}</span>
-                  <span class="roadmap-module-meta">${lessons.length} lesson${lessons.length === 1 ? "" : "s"}</span>
-                </span>
-                <span class="roadmap-module-chevron ${chevronClass}" aria-hidden="true"></span>
-              </button>
-              <button
-                type="button"
-                class="roadmap-share-chip"
-                data-course-share-module="${Number(module.id || 0)}"
-                aria-label="Share module ${moduleTitle}"
-              >
-                Share
-              </button>
-            </div>
+            <button
+              class="roadmap-module-trigger ${moduleTriggerClass}"
+              data-course-module="${escapeHTML(moduleKey)}"
+              data-course-module-id="${Number(module.id || 0)}"
+              aria-expanded="${isExpanded}"
+              aria-controls="roadmap-module-panel-${module.id}"
+            >
+              <span class="roadmap-module-seq">${moduleSequence}</span>
+              <span class="roadmap-module-copy">
+                <span class="roadmap-module-title">${moduleTitle}</span>
+                <span class="roadmap-module-meta">${lessons.length} lesson${lessons.length === 1 ? "" : "s"}</span>
+              </span>
+              <span class="roadmap-module-chevron ${chevronClass}" aria-hidden="true"></span>
+            </button>
             <div
               id="roadmap-module-panel-${module.id}"
               class="roadmap-module-panel ${isExpanded ? "" : "hidden"}"
@@ -2092,14 +2048,6 @@ const initCourseExplorer = async ({ course }) => {
         expandedModuleKey = expandedModuleKey === nextModuleKey ? "" : nextModuleKey;
         syncCourseURL();
         renderSidebar();
-      });
-    });
-
-    sidebar.querySelectorAll("[data-course-share-module]").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const moduleID = Number(button.dataset.courseShareModule || 0);
-        if (!moduleID) return;
-        await shareModule(moduleID);
       });
     });
 
@@ -2155,15 +2103,6 @@ const initCourseExplorer = async ({ course }) => {
             });
           }
         });
-      });
-    });
-
-    sidebar.querySelectorAll("[data-course-share-lesson]").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const lessonSlug = String(button.dataset.courseShareLesson || "").trim();
-        const moduleID = Number(button.dataset.courseShareLessonModule || 0);
-        if (!lessonSlug || !moduleID) return;
-        await shareLesson(moduleID, lessonSlug);
       });
     });
   };
@@ -2227,15 +2166,6 @@ const renderCourseLessonLink = ({ lesson, selectedLessonSlug, moduleID }) => {
           <span class="roadmap-lesson-title">${lessonTitle}</span>
           <span class="roadmap-lesson-pill">${stateLabel}</span>
         </div>
-      </button>
-      <button
-        type="button"
-        class="roadmap-share-chip roadmap-share-chip-lesson"
-        data-course-share-lesson="${lesson.slug}"
-        data-course-share-lesson-module="${Number(moduleID || 0)}"
-        aria-label="Share lesson ${lessonTitle}"
-      >
-        Share
       </button>
     </div>
   `;
