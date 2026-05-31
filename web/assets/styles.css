@@ -495,8 +495,15 @@ textarea {
   overflow: visible;
 }
 
+.roadmap-module-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .roadmap-module-trigger {
   width: 100%;
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
@@ -571,7 +578,35 @@ textarea {
   gap: 0.2rem;
 }
 
+.roadmap-share-chip {
+  flex-shrink: 0;
+  border: 1px solid #dbe3ee;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #64748b;
+  padding: 0.2rem 0.58rem;
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  transition: border-color 0.16s ease, color 0.16s ease, background-color 0.16s ease;
+}
+
+.roadmap-share-chip:hover {
+  border-color: #cbd5e1;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
 .roadmap-lesson-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.36rem;
+}
+
+.roadmap-lesson-main {
   width: 100%;
   border: 1px solid transparent;
   background: transparent;
@@ -582,12 +617,12 @@ textarea {
   cursor: pointer;
 }
 
-.roadmap-lesson-item:hover {
+.roadmap-lesson-main:hover {
   border-color: #dbe2ec;
   background: #f8fafc;
 }
 
-.roadmap-lesson-item.is-selected {
+.roadmap-lesson-item.is-selected .roadmap-lesson-main {
   border-color: rgba(26, 137, 23, 0.4);
   background: rgba(22, 163, 74, 0.09);
 }
@@ -643,6 +678,11 @@ textarea {
   border-color: #e5e7eb;
   color: #6b7280;
   background: #f8fafc;
+}
+
+.roadmap-share-chip-lesson {
+  padding-left: 0.52rem;
+  padding-right: 0.52rem;
 }
 
 .course-lesson-shell {

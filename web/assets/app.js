@@ -1825,12 +1825,93 @@ const buildCourseLessonToc = (bodyContainer) => {
   });
 };
 
+const parseCourseDeepLinkQuery = () => {
+  const params = new URLSearchParams(window.location.search || "");
+  const moduleID = Number(params.get("module") || 0);
+  const lessonSlug = String(params.get("lesson") || "").trim();
+
+  return {
+    moduleID: Number.isFinite(moduleID) && moduleID > 0 ? moduleID : 0,
+    lessonSlug
+  };
+};
+
+const findCourseLessonMatchBySlug = (modules, lessonSlug) => {
+  if (!lessonSlug) return null;
+
+  for (const module of modules) {
+    const lessons = Array.isArray(module.lessons) ? module.lessons : [];
+    const lesson = lessons.find((candidate) => String(candidate.slug || "") === lessonSlug);
+    if (lesson) {
+      return { module, lesson };
+    }
+  }
+
+  return null;
+};
+
+const findCourseModuleByID = (modules, moduleID) => {
+  if (!moduleID) return null;
+  return modules.find((module) => Number(module.id || 0) === Number(moduleID || 0)) || null;
+};
+
+const findCourseModuleIDForLessonSlug = (modules, lessonSlug) => {
+  const lessonMatch = findCourseLessonMatchBySlug(modules, lessonSlug);
+  if (!lessonMatch?.module) return 0;
+  return Number(lessonMatch.module.id || 0);
+};
+
+const findPreferredLessonSlugInModule = (module) => {
+  const lessons = Array.isArray(module?.lessons) ? module.lessons : [];
+  if (lessons.length === 0) return "";
+
+  const unlockedLesson = lessons.find((lesson) => !lesson.is_locked);
+  if (unlockedLesson?.slug) {
+    return String(unlockedLesson.slug);
+  }
+
+  return String(lessons[0]?.slug || "");
+};
+
+const buildCourseDeepLink = ({ courseSlug, moduleID, lessonSlug }) => {
+  const safeCourseSlug = String(courseSlug || "").trim();
+  if (!safeCourseSlug) return window.location.href;
+
+  const params = new URLSearchParams();
+  const numericModuleID = Number(moduleID || 0);
+  const safeLessonSlug = String(lessonSlug || "").trim();
+
+  if (numericModuleID > 0) {
+    params.set("module", String(numericModuleID));
+  }
+  if (safeLessonSlug) {
+    params.set("lesson", safeLessonSlug);
+  }
+
+  const query = params.toString();
+  const relativeURL = query
+    ? `/course/${encodeURIComponent(safeCourseSlug)}?${query}`
+    : `/course/${encodeURIComponent(safeCourseSlug)}`;
+
+  return `${window.location.origin}${relativeURL}`;
+};
+
+const replaceCourseDeepLinkURL = ({ courseSlug, moduleID, lessonSlug }) => {
+  const nextURL = buildCourseDeepLink({ courseSlug, moduleID, lessonSlug });
+  const currentURL = window.location.href;
+  if (nextURL === currentURL) return;
+
+  const nextPath = nextURL.replace(window.location.origin, "");
+  window.history.replaceState(null, "", nextPath);
+};
+
 const initCourseExplorer = async ({ course }) => {
   const modules = Array.isArray(course.modules) ? course.modules : [];
   const sidebar = document.getElementById("course-modules-sidebar");
   const roadmapMeta = document.getElementById("course-roadmap-meta");
   const lessonTitle = document.getElementById("course-lesson-title");
   const lessonMeta = document.getElementById("course-lesson-meta");
+  const lessonShareBtn = document.getElementById("course-lesson-share");
   const body = selectors.courseBody();
 
   if (!sidebar || !body) return;
@@ -1845,9 +1926,113 @@ const initCourseExplorer = async ({ course }) => {
     return String(module.id);
   };
 
+  const deepLink = parseCourseDeepLinkQuery();
+  const deepLinkedModule = findCourseModuleByID(modules, deepLink.moduleID);
+  const deepLinkedLesson = findCourseLessonMatchBySlug(modules, deepLink.lessonSlug);
+
+  let selectedLessonSlug = "";
+  if (deepLinkedLesson?.lesson?.slug) {
+    selectedLessonSlug = String(deepLinkedLesson.lesson.slug);
+  } else if (deepLinkedModule) {
+    selectedLessonSlug = findPreferredLessonSlugInModule(deepLinkedModule);
+  }
+  if (!selectedLessonSlug) {
+    selectedLessonSlug = course.selected_lesson_slug || findFirstUnlockedLessonSlug(modules);
+  }
+
+  const selectedLessonModuleID = findCourseModuleIDForLessonSlug(modules, selectedLessonSlug);
+
   let expandedModuleKey = resolveModuleKey(modules[0]);
-  let selectedLessonSlug = course.selected_lesson_slug || findFirstUnlockedLessonSlug(modules);
+  if (deepLinkedLesson?.module) {
+    expandedModuleKey = resolveModuleKey(deepLinkedLesson.module);
+  } else if (deepLinkedModule) {
+    expandedModuleKey = resolveModuleKey(deepLinkedModule);
+  } else if (selectedLessonModuleID > 0) {
+    expandedModuleKey = String(selectedLessonModuleID);
+  }
+
   let stopLessonTracking = null;
+
+  const activeRouteModuleID = () => {
+    const expandedModuleID = Number(expandedModuleKey || 0);
+    if (expandedModuleID > 0) {
+      return expandedModuleID;
+    }
+    return findCourseModuleIDForLessonSlug(modules, selectedLessonSlug);
+  };
+
+  const syncCourseURL = () => {
+    replaceCourseDeepLinkURL({
+      courseSlug: course.slug || "",
+      moduleID: activeRouteModuleID(),
+      lessonSlug: selectedLessonSlug
+    });
+  };
+
+  const updateHeaderShareAction = () => {
+    if (!lessonShareBtn) return;
+
+    const activeLesson = findCourseLessonMatchBySlug(modules, selectedLessonSlug);
+    if (!activeLesson?.lesson) {
+      lessonShareBtn.disabled = true;
+      lessonShareBtn.setAttribute("aria-disabled", "true");
+      lessonShareBtn.onclick = null;
+      return;
+    }
+
+    const activeModuleID = Number(activeLesson.module?.id || 0);
+    const shareURL = buildCourseDeepLink({
+      courseSlug: course.slug || "",
+      moduleID: activeModuleID,
+      lessonSlug: activeLesson.lesson.slug || ""
+    });
+    const shareTitle = `Share lesson: ${activeLesson.lesson.title || "Lesson"}`;
+    const shareText = `${course.title || "Course"} - ${activeLesson.lesson.title || "Lesson"}`;
+
+    lessonShareBtn.disabled = false;
+    lessonShareBtn.removeAttribute("aria-disabled");
+    lessonShareBtn.onclick = async () => {
+      await openShareDialog({
+        title: shareTitle,
+        url: shareURL,
+        text: shareText
+      });
+    };
+  };
+
+  const shareModule = async (moduleID) => {
+    const module = findCourseModuleByID(modules, moduleID);
+    if (!module) return;
+
+    const moduleURL = buildCourseDeepLink({
+      courseSlug: course.slug || "",
+      moduleID: Number(module.id || 0),
+      lessonSlug: ""
+    });
+
+    await openShareDialog({
+      title: `Share module: ${module.title || "Module"}`,
+      url: moduleURL,
+      text: `${course.title || "Course"} - ${module.title || "Module"}`
+    });
+  };
+
+  const shareLesson = async (moduleID, lessonSlug) => {
+    const lessonMatch = findCourseLessonMatchBySlug(modules, lessonSlug);
+    if (!lessonMatch?.lesson) return;
+
+    const lessonURL = buildCourseDeepLink({
+      courseSlug: course.slug || "",
+      moduleID,
+      lessonSlug: lessonMatch.lesson.slug || ""
+    });
+
+    await openShareDialog({
+      title: `Share lesson: ${lessonMatch.lesson.title || "Lesson"}`,
+      url: lessonURL,
+      text: `${course.title || "Course"} - ${lessonMatch.lesson.title || "Lesson"}`
+    });
+  };
 
   const renderSidebar = () => {
     sidebar.innerHTML = modules
@@ -1861,25 +2046,40 @@ const initCourseExplorer = async ({ course }) => {
         const moduleTitle = escapeHTML(module.title || "Module");
         return `
           <section class="roadmap-module-card">
-            <button
-              class="roadmap-module-trigger ${moduleTriggerClass}"
-              data-course-module="${escapeHTML(moduleKey)}"
-              aria-expanded="${isExpanded}"
-              aria-controls="roadmap-module-panel-${module.id}"
-            >
-              <span class="roadmap-module-seq">${moduleSequence}</span>
-              <span class="roadmap-module-copy">
-                <span class="roadmap-module-title">${moduleTitle}</span>
-                <span class="roadmap-module-meta">${lessons.length} lesson${lessons.length === 1 ? "" : "s"}</span>
-              </span>
-              <span class="roadmap-module-chevron ${chevronClass}" aria-hidden="true"></span>
-            </button>
+            <div class="roadmap-module-head">
+              <button
+                class="roadmap-module-trigger ${moduleTriggerClass}"
+                data-course-module="${escapeHTML(moduleKey)}"
+                data-course-module-id="${Number(module.id || 0)}"
+                aria-expanded="${isExpanded}"
+                aria-controls="roadmap-module-panel-${module.id}"
+              >
+                <span class="roadmap-module-seq">${moduleSequence}</span>
+                <span class="roadmap-module-copy">
+                  <span class="roadmap-module-title">${moduleTitle}</span>
+                  <span class="roadmap-module-meta">${lessons.length} lesson${lessons.length === 1 ? "" : "s"}</span>
+                </span>
+                <span class="roadmap-module-chevron ${chevronClass}" aria-hidden="true"></span>
+              </button>
+              <button
+                type="button"
+                class="roadmap-share-chip"
+                data-course-share-module="${Number(module.id || 0)}"
+                aria-label="Share module ${moduleTitle}"
+              >
+                Share
+              </button>
+            </div>
             <div
               id="roadmap-module-panel-${module.id}"
               class="roadmap-module-panel ${isExpanded ? "" : "hidden"}"
               data-course-module-panel="${module.id}"
             >
-              ${lessons.map((lesson) => renderCourseLessonLink(lesson, selectedLessonSlug)).join("")}
+              ${lessons.map((lesson) => renderCourseLessonLink({
+                lesson,
+                selectedLessonSlug,
+                moduleID: Number(module.id || 0)
+              })).join("")}
             </div>
           </section>
         `;
@@ -1890,7 +2090,16 @@ const initCourseExplorer = async ({ course }) => {
       button.addEventListener("click", () => {
         const nextModuleKey = String(button.dataset.courseModule || "");
         expandedModuleKey = expandedModuleKey === nextModuleKey ? "" : nextModuleKey;
+        syncCourseURL();
         renderSidebar();
+      });
+    });
+
+    sidebar.querySelectorAll("[data-course-share-module]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const moduleID = Number(button.dataset.courseShareModule || 0);
+        if (!moduleID) return;
+        await shareModule(moduleID);
       });
     });
 
@@ -1898,6 +2107,7 @@ const initCourseExplorer = async ({ course }) => {
       button.addEventListener("click", async () => {
         const lessonSlug = button.dataset.courseLesson;
         const lessonID = Number(button.dataset.courseLessonId || 0);
+        const lessonModuleID = Number(button.dataset.courseLessonModule || 0);
         const lessonLocked = button.dataset.courseLessonLocked === "true";
         if (!lessonSlug) return;
         if (lessonLocked) {
@@ -1919,7 +2129,12 @@ const initCourseExplorer = async ({ course }) => {
         sendEvents([lessonEvent]);
 
         selectedLessonSlug = lessonSlug;
+        if (lessonModuleID > 0) {
+          expandedModuleKey = String(lessonModuleID);
+        }
+        syncCourseURL();
         renderSidebar();
+        updateHeaderShareAction();
         await loadCourseLessonContent(course.slug, lessonSlug, {
           body,
           lessonTitle,
@@ -1942,8 +2157,19 @@ const initCourseExplorer = async ({ course }) => {
         });
       });
     });
+
+    sidebar.querySelectorAll("[data-course-share-lesson]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const lessonSlug = String(button.dataset.courseShareLesson || "").trim();
+        const moduleID = Number(button.dataset.courseShareLessonModule || 0);
+        if (!lessonSlug || !moduleID) return;
+        await shareLesson(moduleID, lessonSlug);
+      });
+    });
   };
 
+  syncCourseURL();
+  updateHeaderShareAction();
   renderSidebar();
 
   if (!selectedLessonSlug) {
@@ -1974,9 +2200,10 @@ const initCourseExplorer = async ({ course }) => {
       });
     }
   });
+  updateHeaderShareAction();
 };
 
-const renderCourseLessonLink = (lesson, selectedLessonSlug) => {
+const renderCourseLessonLink = ({ lesson, selectedLessonSlug, moduleID }) => {
   const isLocked = Boolean(lesson.is_locked);
   const isSelected = lesson.slug === selectedLessonSlug;
   const lessonTitle = escapeHTML(lesson.title || "Lesson");
@@ -1986,15 +2213,31 @@ const renderCourseLessonLink = (lesson, selectedLessonSlug) => {
   const lockIcon = isLocked ? "🔒" : "•";
 
   return `
-    <button
-      class="roadmap-lesson-item ${selectedClass} ${lockedClass}"
-      data-course-lesson="${lesson.slug}" data-course-lesson-id="${Number(lesson.id || 0)}" data-course-lesson-locked="${isLocked}">
-      <div class="roadmap-lesson-row">
-        <span class="roadmap-lesson-bullet" aria-hidden="true">${lockIcon}</span>
-        <span class="roadmap-lesson-title">${lessonTitle}</span>
-        <span class="roadmap-lesson-pill">${stateLabel}</span>
-      </div>
-    </button>
+    <div class="roadmap-lesson-item ${selectedClass} ${lockedClass}">
+      <button
+        type="button"
+        class="roadmap-lesson-main"
+        data-course-lesson="${lesson.slug}"
+        data-course-lesson-id="${Number(lesson.id || 0)}"
+        data-course-lesson-module="${Number(moduleID || 0)}"
+        data-course-lesson-locked="${isLocked}"
+      >
+        <div class="roadmap-lesson-row">
+          <span class="roadmap-lesson-bullet" aria-hidden="true">${lockIcon}</span>
+          <span class="roadmap-lesson-title">${lessonTitle}</span>
+          <span class="roadmap-lesson-pill">${stateLabel}</span>
+        </div>
+      </button>
+      <button
+        type="button"
+        class="roadmap-share-chip roadmap-share-chip-lesson"
+        data-course-share-lesson="${lesson.slug}"
+        data-course-share-lesson-module="${Number(moduleID || 0)}"
+        aria-label="Share lesson ${lessonTitle}"
+      >
+        Share
+      </button>
+    </div>
   `;
 };
 
@@ -8280,29 +8523,82 @@ const initSearchOverlay = () => {
   });
 };
 
+const buildSocialShareLinks = ({ url, text }) => {
+  const safeURL = String(url || window.location.href);
+  const safeText = String(text || "").trim();
+  const textWithURL = safeText ? `${safeText}\n${safeURL}` : safeURL;
+
+  return {
+    whatsapp: `https://wa.me/?text=${encodeURIComponent(textWithURL)}`,
+    x: `https://twitter.com/intent/tweet?text=${encodeURIComponent(safeText)}&url=${encodeURIComponent(safeURL)}`,
+    linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(safeURL)}`,
+    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(safeURL)}`
+  };
+};
+
+const tryNativeShare = async ({ title, text, url }) => {
+  if (!navigator.share) return false;
+
+  try {
+    await navigator.share({
+      title: String(title || document.title || ""),
+      text: String(text || ""),
+      url: String(url || window.location.href)
+    });
+    return true;
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      return true;
+    }
+    return false;
+  }
+};
+
+const openShareOverlay = ({ title, url, text }) => {
+  const safeTitle = String(title || "Share").trim() || "Share";
+  const safeURL = String(url || window.location.href);
+  const shareLinks = buildSocialShareLinks({ url: safeURL, text });
+
+  const overlay = document.createElement("div");
+  overlay.className = "fixed inset-0 bg-black/70 z-50 flex items-center justify-center";
+  overlay.innerHTML = `
+    <div class="bg-white rounded-3xl border border-slate-200 p-6 w-full max-w-md">
+      <h3 class="font-display text-xl text-ink">${escapeHTML(safeTitle)}</h3>
+      <p class="mt-2 text-sm text-slate-500 break-all">${escapeHTML(safeURL)}</p>
+      <div class="mt-4 grid gap-3">
+        <button id="share-copy" class="w-full rounded-full border border-slate-200 py-2 text-slate-700">Copy link</button>
+        <a href="${shareLinks.whatsapp}" target="_blank" rel="noopener noreferrer" class="w-full rounded-full border border-slate-200 py-2 text-center text-slate-700">Share on WhatsApp</a>
+        <a href="${shareLinks.x}" target="_blank" rel="noopener noreferrer" class="w-full rounded-full border border-slate-200 py-2 text-center text-slate-700">Share on X</a>
+        <a href="${shareLinks.linkedin}" target="_blank" rel="noopener noreferrer" class="w-full rounded-full border border-slate-200 py-2 text-center text-slate-700">Share on LinkedIn</a>
+        <a href="${shareLinks.facebook}" target="_blank" rel="noopener noreferrer" class="w-full rounded-full border border-slate-200 py-2 text-center text-slate-700">Share on Facebook</a>
+      </div>
+      <button id="share-close" class="mt-4 text-slate-500">Close</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector("#share-close").addEventListener("click", () => overlay.remove());
+  overlay.querySelector("#share-copy").addEventListener("click", async () => {
+    await navigator.clipboard.writeText(safeURL);
+    showToast("Link copied");
+  });
+};
+
+const openShareDialog = async ({ title, url, text }) => {
+  const sharedViaNativeDialog = await tryNativeShare({ title, text, url });
+  if (sharedViaNativeDialog) return;
+  openShareOverlay({ title, url, text });
+};
+
 const initShareModal = () => {
   const trigger = document.getElementById("share-button");
   if (!trigger) return;
 
-  trigger.addEventListener("click", () => {
-    const overlay = document.createElement("div");
-    overlay.className = "fixed inset-0 bg-black/70 z-50 flex items-center justify-center";
-    overlay.innerHTML = `
-      <div class="bg-white rounded-3xl border border-slate-200 p-6 w-full max-w-md">
-        <h3 class="font-display text-xl text-ink">Share this post</h3>
-        <div class="mt-4 grid gap-3">
-          <button id="share-copy" class="w-full rounded-full border border-slate-200 py-2 text-slate-700">Copy link</button>
-          <a href="https://twitter.com/intent/tweet?url=${encodeURIComponent(window.location.href)}" target="_blank" class="w-full rounded-full border border-slate-200 py-2 text-center text-slate-700">Share on Twitter</a>
-          <a href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}" target="_blank" class="w-full rounded-full border border-slate-200 py-2 text-center text-slate-700">Share on LinkedIn</a>
-        </div>
-        <button id="share-close" class="mt-4 text-slate-500">Close</button>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    overlay.querySelector("#share-close").addEventListener("click", () => overlay.remove());
-    overlay.querySelector("#share-copy").addEventListener("click", async () => {
-      await navigator.clipboard.writeText(window.location.href);
-      showToast("Link copied");
+  trigger.addEventListener("click", async () => {
+    await openShareDialog({
+      title: "Share this post",
+      text: state.post?.title || "",
+      url: window.location.href
     });
   });
 };
